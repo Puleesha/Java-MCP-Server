@@ -1,17 +1,94 @@
 package org.example;
 
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
-public class Main {
-    public static void main(String[] args) {
-        //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
-        // to see how IntelliJ IDEA suggests fixing it.
-        System.out.printf("Hello and welcome!");
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.server.McpSyncServer;
+import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-        for (int i = 1; i <= 5; i++) {
-            //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-            // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
-            System.out.println("i = " + i);
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+
+public class Main
+{
+    private static final Logger log = LoggerFactory.getLogger(Main.class);
+    private static final String[] QUOTES = new String[] {
+            "To be or not to be, that's the question. — Me",
+            "To be and not to be, that's the answer. — Some wannabe philosopher",
+            "Simplicity is the soul of efficiency. — Austin Freeman"
+    };
+    private static final Random RNG = new Random();
+
+    public static void main(String[] args)
+    {
+        try
+        {
+            JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(new ObjectMapper());
+
+            StdioServerTransportProvider transport = new StdioServerTransportProvider(mapper);
+
+            McpSchema.JsonSchema schema = new McpSchema.JsonSchema(
+                "object",           // type
+                    Map.of(),            // properties
+                    List.of(),           // required
+                    false,               // additionalProperties
+                    Map.of(),            // $defs
+                    Map.of()             // definitions
+            );
+
+            McpServerFeatures.SyncToolSpecification getQuote = McpServerFeatures.SyncToolSpecification.builder()
+                    .tool(new McpSchema.Tool(
+                            "get_random_quote",
+                            "Get some random quote",
+                            "Returns a random quote",
+                            schema,
+                            null,
+                            null,
+                            null
+                    ))
+                    .callHandler((exchange, toolReq) -> {
+                        String q = QUOTES[RNG.nextInt(QUOTES.length)];
+                        log.info("get_quote called -> {}", q);
+                        // 0.9.0 often accepts this simple form
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent(q)  // -> content: [{ "type": "text", "text": "..." }]
+                                .isError(false)
+                                .build();
+                    })
+                    .build();
+
+            McpSyncServer server = McpServer.sync(transport)
+                    .serverInfo("my-mcp-server", "0.0.1")
+                    .capabilities(McpSchema.ServerCapabilities.builder()
+                            .tools(true)
+                            .logging()
+                            .build()
+                    )
+                    .tools(List.of(getQuote))
+                    .build();
+
+//            server.addTool(getQuote);
+
+            log.info("my-mcp-server ready (stdio). Waiting for calls...");
+
+            // Keep the JVM alive so the gateway can call us
+            synchronized (Main.class) { Main.class.wait(); }
+
+        }
+        catch (InterruptedException ie)
+        {
+            Thread.currentThread().interrupt();
+            log.warn("Interrupted, shutting down.");
+        }
+        catch (Exception e)
+        {
+            log.error("Server error", e);
+            System.exit(1);
         }
     }
 }
