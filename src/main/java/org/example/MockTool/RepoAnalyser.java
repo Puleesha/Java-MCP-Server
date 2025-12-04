@@ -9,6 +9,13 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.StructuredTaskScope;
 
+/**
+ *  This class represent a repository analyser, where it can access files within a folder and return the number of lines and TODOs present.
+ *
+ * @author  Puleesha Vilhan
+ * @since   04/12/2025
+ * @version 1.0.0
+ */
 public class RepoAnalyser {
 
     // Simple per-file stats
@@ -116,9 +123,9 @@ public class RepoAnalyser {
             String line;
             while ((line = reader.readLine()) != null) {
                 lineCount++;
-                if (line.contains("TODO")) {
+
+                if (line.contains("TODO"))
                     todoCount++;
-                }
             }
         }
 
@@ -126,9 +133,9 @@ public class RepoAnalyser {
     }
 
     // Optional quick manual test
-    public static void main(String[] args) throws Exception {
+    public void analyseRepoTool(int maxFiles) throws Exception {
         Path root = Paths.get("./sample-repo");
-        int maxFiles = 100;
+//        int maxFiles = 100;
         List<String> exts = List.of(".java", ".kt", ".rs", ".ts", ".js");
 
         RepoSummary summary = analyzeRepo(root, maxFiles, exts);
