@@ -7,6 +7,7 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import org.example.MockTool.RepoAnalyser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,22 +42,21 @@ public class Main
                     Map.of()             // definitions
             );
 
-            McpServerFeatures.SyncToolSpecification getQuote = McpServerFeatures.SyncToolSpecification.builder()
+            McpServerFeatures.SyncToolSpecification callJavaRepo = McpServerFeatures.SyncToolSpecification.builder()
                     .tool(new McpSchema.Tool(
-                            "get_random_quote",
-                            "Get some random quote",
-                            "Returns a random quote",
+                            "java_repo_1_baseline",
+                            "Analyse Java repository 1 in baseline server",
+                            "Analyses a given number of files using the baseline Java server",
                             schema,
                             null,
                             null,
                             null
                     ))
                     .callHandler((exchange, toolReq) -> {
-                        String q = QUOTES[RNG.nextInt(QUOTES.length)];
-                        log.info("get_quote called -> {}", q);
-                        // 0.9.0 often accepts this simple form
+                        RepoAnalyser analyser = new RepoAnalyser();
+
                         return McpSchema.CallToolResult.builder()
-                                .addTextContent(q)  // -> content: [{ "type": "text", "text": "..." }]
+                                .addTextContent("")  // -> content: [{ "type": "text", "text": "..." }]
                                 .isError(false)
                                 .build();
                     })
@@ -69,7 +69,7 @@ public class Main
                             .logging()
                             .build()
                     )
-                    .tools(List.of(getQuote))
+                    .tools(List.of(callJavaRepo))
                     .build();
 
 //            server.addTool(getQuote);

@@ -13,8 +13,8 @@ import java.util.List;
  *  This class represent a repository analyser, where it can access files within a folder and return the number of lines and TODOs present.
  *
  * @author  Puleesha Vilhan
- * @since   04/12/2025
- * @version 1.0.0
+ * @since   05/12/2025
+ * @version 1.0.1
  */
 public class RepoAnalyser {
 
