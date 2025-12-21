@@ -7,86 +7,86 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
-import org.example.MockTool.RepoAnalyser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
-public class Main
-{
+public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
-    private static final String[] QUOTES = new String[] {
-            "To be or not to be, that's the question. — Me",
-            "To be and not to be, that's the answer. — Some wannabe philosopher",
-            "Simplicity is the soul of efficiency. — Austin Freeman"
-    };
-    private static final Random RNG = new Random();
 
-    public static void main(String[] args)
-    {
-        try
-        {
+    public static void main(String[] args) {
+        try {
             JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(new ObjectMapper());
-
             StdioServerTransportProvider transport = new StdioServerTransportProvider(mapper);
 
+            // Tool input schema: { "maxFiles": <int> }
             McpSchema.JsonSchema schema = new McpSchema.JsonSchema(
-                "object",           // type
-                    Map.of(),            // properties
-                    List.of(),           // required
-                    false,               // additionalProperties
-                    Map.of(),            // $defs
-                    Map.of()             // definitions
+                    "object",
+                    Map.of(
+                            "maxFiles", Map.of(
+                                    "type", "integer",
+                                    "minimum", 1,
+                                    "description", "Maximum number of files to analyze"
+                            )
+                    ),
+                    List.of("maxFiles"),
+                    false,
+                    Map.of(),
+                    Map.of()
             );
 
-            McpServerFeatures.SyncToolSpecification callJavaRepo = McpServerFeatures.SyncToolSpecification.builder()
-                    .tool(new McpSchema.Tool(
-                            "java_repo_1_baseline",
-                            "Analyse Java repository 1 in baseline server",
-                            "Analyses a given number of files using the baseline Java server",
-                            schema,
-                            null,
-                            null,
-                            null
-                    ))
-                    .callHandler((exchange, toolReq) -> {
-                        RepoAnalyser analyser = new RepoAnalyser();
+            McpServerFeatures.SyncToolSpecification analyzeRepoBaseline =
+                    McpServerFeatures.SyncToolSpecification.builder()
+                            .tool(new McpSchema.Tool(
+                                    "analyze_repo_baseline",
+                                    "Analyze a repository using the baseline (non-threaded) server variant.",
+                                    "Takes maxFiles and returns a summary. (Implementation ignored for now.)",
+                                    schema,
+                                    null,
+                                    null,
+                                    null
+                            ))
+                            .callHandler((exchange, toolReq) -> {
+                                // Read maxFiles from the tool call arguments
+                                // NOTE: depending on SDK version, arguments may be exposed as:
+                                // - toolReq.arguments()
+                                // - toolReq.params().arguments()
+                                // If this doesn't compile, check the getters and adjust accordingly.
+                                Map<String, Object> arguments = toolReq.arguments();
+                                int maxFiles = ((Number) arguments.get("maxFiles")).intValue();
 
-                        return McpSchema.CallToolResult.builder()
-                                .addTextContent("")  // -> content: [{ "type": "text", "text": "..." }]
-                                .isError(false)
-                                .build();
-                    })
-                    .build();
+                                log.info("Baseline tool called with maxFiles={}", maxFiles);
+
+                                return McpSchema.CallToolResult.builder()
+                                        .addTextContent("OK (baseline). maxFiles=" + maxFiles)
+                                        .isError(false)
+                                        .build();
+                            })
+                            .build();
 
             McpSyncServer server = McpServer.sync(transport)
-                    .serverInfo("my-mcp-server", "0.0.1")
+                    .serverInfo("baseline-java-mcp", "1.0.0")
                     .capabilities(McpSchema.ServerCapabilities.builder()
                             .tools(true)
                             .logging()
                             .build()
                     )
-                    .tools(List.of(callJavaRepo))
+                    .tools(List.of(analyzeRepoBaseline))
                     .build();
 
-//            server.addTool(getQuote);
+            log.info("Baseline MCP Server ready (stdio). Waiting for calls...");
 
-            log.info("my-mcp-server ready (stdio). Waiting for calls...");
-
-            // Keep the JVM alive so the gateway can call us
-            synchronized (Main.class) { Main.class.wait(); }
-
+            synchronized (Main.class) {
+                Main.class.wait();
+            }
         }
-        catch (InterruptedException ie)
-        {
+        catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
             log.warn("Interrupted, shutting down.");
         }
-        catch (Exception e)
-        {
+        catch (Exception e) {
             log.error("Server error", e);
             System.exit(1);
         }
