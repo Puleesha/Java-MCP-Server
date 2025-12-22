@@ -43,6 +43,20 @@
             <version>2.18.3</version>
         </dependency>
 
+        <!-- Micrometer core -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <version>1.13.6</version>
+        </dependency>
+
+        <!-- Prometheus registry -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <version>1.13.6</version>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -69,16 +83,16 @@
                 </executions>
             </plugin>
 
-            <!-- Ensure Java 21 (optional if properties suffice) -->
+            <!-- Using Java 21 preview (Using same version for both variants since structured concurrency is still in preview -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
                     <release>21</release>
-                    <source>21</source>
-                    <target>21</target>
-                    <compilerArgs>--enable-preview</compilerArgs>
+                    <compilerArgs>
+                        <arg>--enable-preview</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
         </plugins>

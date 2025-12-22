@@ -1,6 +1,8 @@
 package org.example;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
@@ -9,9 +11,17 @@ import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.micrometer.core.instrument.*;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.Executors;
 
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
@@ -63,6 +73,35 @@ public class Main {
                                         .addTextContent("OK (baseline). maxFiles=" + maxFiles)
                                         .isError(false)
                                         .build();
+
+                                /*
+                                 *
+                                 * The Metics and other prometheus and grafana stuff
+                                 *
+                                 */
+
+//                                active.incrementAndGet();
+//                                long start = System.nanoTime();
+//                                reqTotal.increment();
+//
+//                                try {
+//                                    // TODO: parse args (maxFiles) and call analyzer later
+//                                    // int maxFiles = ((Number) toolReq.arguments().get("maxFiles")).intValue();
+//
+//                                    return McpSchema.CallToolResult.builder()
+//                                            .addTextContent("OK")
+//                                            .isError(false)
+//                                            .build();
+//                                } catch (Exception e) {
+//                                    reqErrors.increment();
+//                                    return McpSchema.CallToolResult.builder()
+//                                            .addTextContent("ERROR: " + e.getMessage())
+//                                            .isError(true)
+//                                            .build();
+//                                } finally {
+//                                    reqLatency.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+//                                    active.decrementAndGet();
+//                                }
                             })
                             .build();
 
@@ -90,5 +129,48 @@ public class Main {
             log.error("Server error", e);
             System.exit(1);
         }
+
+        /*
+         *
+         * The Metics and other prometheus and grafana stuff
+         *
+         */
+
+        PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+
+        // Minimal metrics you need
+        Counter reqTotal = Counter.builder("mcp_tool_requests_total")
+                .description("Total tool calls received")
+                .register(registry);
+
+        Counter reqErrors = Counter.builder("mcp_tool_request_errors_total")
+                .description("Total tool calls failed")
+                .register(registry);
+
+        Timer reqLatency = Timer.builder("mcp_tool_request_duration")
+                .description("Tool call duration")
+                .publishPercentileHistogram()
+                .register(registry);
+
+        AtomicInteger active = registry.gauge("mcp_active_requests", new java.util.concurrent.atomic.AtomicInteger(0));
+
+        // Start a tiny HTTP metrics server
+        int metricsPort = Integer.parseInt(System.getProperty("METRICS_PORT", "9100"));
+        HttpServer metricsServer = null;
+        try {
+            metricsServer = HttpServer.create(new InetSocketAddress(metricsPort), 0);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        metricsServer.createContext("/metrics", exchange -> {
+            byte[] body = registry.scrape().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/plain; version=0.0.4");
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) { os.write(body); }
+        });
+        metricsServer.setExecutor(Executors.newSingleThreadExecutor());
+        metricsServer.start();
+
+        log.info("Metrics server running on http://localhost:{}/metrics", metricsPort);
     }
 }
