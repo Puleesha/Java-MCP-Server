@@ -14,7 +14,7 @@ import java.util.List;
  *
  * @author  Puleesha Vilhan
  * @since   05/12/2025
- * @version 1.0.1
+ * @version 1.1.0
  */
 public class RepoAnalyser {
 
@@ -44,9 +44,9 @@ public class RepoAnalyser {
         return filesToAnalyze;
     }
 
-    private static List<Path> discoverFiles(Path rootDir,
-                                            int maxFiles,
-                                            List<String> extensions) throws IOException {
+    private List<Path> discoverFiles(Path rootDir,
+                                     int maxFiles,
+                                     List<String> extensions) throws IOException {
         List<Path> result = new ArrayList<>();
 
         try (var stream = Files.walk(rootDir)) {
@@ -60,7 +60,7 @@ public class RepoAnalyser {
         return result;
     }
 
-    private static boolean hasAllowedExtension(Path path, List<String> extensions) {
+    private boolean hasAllowedExtension(Path path, List<String> extensions) {
         String name = path.getFileName().toString().toLowerCase();
         for (String ext : extensions) {
             if (name.endsWith(ext.toLowerCase())) {
