@@ -18,6 +18,8 @@ import java.util.List;
  */
 public class RepoAnalyser {
 
+    private int fileCount = 0;
+
     /**
      * List all the files that have to be analysed
      *
@@ -77,17 +79,24 @@ public class RepoAnalyser {
      *
      * @throws  IOException If the reader throws and error
      */
-    private static FileStats analyzeFile(Path file) throws IOException {
+    private FileStats analyzeFile(Path file) throws IOException {
         long lineCount = 0;
         long todoCount = 0;
 
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
+
+            // Simulate file reading errors every 20 files to test fault containment
+            if (fileCount % 20 == 0)
+                throw new IOException("Could not read the file");
+
             while ((line = reader.readLine()) != null) {
                 lineCount++;
 
                 if (line.contains("TODO"))
                     todoCount++;
+
+                fileCount++;
             }
         }
 
