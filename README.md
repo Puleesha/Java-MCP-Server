@@ -4,7 +4,7 @@ More specifically, this is the: <h2>Baseline Java MCP Server</h2>
 
 This server uses a <strong> sequential apporach </strong> for file reading and cancellation / error handling.
 
-It includes a mock repository for the file analysis, which include four folders
+It includes a mock repository for the file analysis, which include three folders:
 
 <ul>
   <li><strong>Java -</strong> Contains a section of the apache-commons-lang library</li>
