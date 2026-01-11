@@ -24,18 +24,21 @@ public class RepoAnalyser {
      * List all the files that have to be analysed
      *
      * @param   folderPath The folder path of the repository
+     * @param   typeExtension The language of the files to be analysed by the server
      * @param   maxFiles The max number of files to be scanned
      *
      * @return  A list of the paths of all files
      */
-    public List<Path> analyzeRepository(String folderPath, int maxFiles) {
+    public List<Path> analyzeRepository(String folderPath, String typeExtension, int maxFiles) {
 
         Path rootDir = Paths.get(folderPath);
-        List<String> fileTypes = List.of(".java", ".kt", ".rs", ".ts", ".js");
+        List<String> fileType = List.of(typeExtension);
+        //  Send one of these as a parameter
+        //   ".java", ".kt", ".rs", ".ts", ".js"
 
         List<Path> filesToAnalyze = new ArrayList<>();
         try {
-            filesToAnalyze = discoverFiles(rootDir, maxFiles, fileTypes);
+            filesToAnalyze = discoverFiles(rootDir, maxFiles, fileType);
         }
         catch (IOException e) {
             e.printStackTrace();
@@ -53,6 +56,7 @@ public class RepoAnalyser {
             stream
                     .filter(Files::isRegularFile)
                     .filter(path -> hasAllowedExtension(path, extensions))
+                    .sorted()   // Return the same set of files for every function call
                     .limit(maxFiles)
                     .forEach(result::add);
         }
