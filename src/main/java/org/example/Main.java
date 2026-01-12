@@ -52,7 +52,7 @@ public class Main {
             McpServerFeatures.SyncToolSpecification analyzeRepoBaseline =
                     McpServerFeatures.SyncToolSpecification.builder()
                             .tool(new McpSchema.Tool(
-                                    "analyse_java_repo(Java_Baseline)",
+                                    "analyse_java_repo_JB",
                                     "Analyze the java files using the Java baseline server variant.",
                                     "Takes maxFiles and returns a summary of the number of lines and TODOs of selected files",
                                     schema,
@@ -78,8 +78,8 @@ public class Main {
                                     try {
                                         repoAnalyser.analyzeFile(path);
                                     } catch (IOException e) {
-                                        // Create custom exception if needed
-                                        throw new RuntimeException(e);
+                                        log.error("Server error", e);
+                                        System.exit(1);;
                                     }
                                 }
 
@@ -176,7 +176,8 @@ public class Main {
         try {
             metricsServer = HttpServer.create(new InetSocketAddress(metricsPort), 0);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            log.error("Server error", e);
+            System.exit(1);
         }
         metricsServer.createContext("/metrics", exchange -> {
             byte[] body = registry.scrape().getBytes(StandardCharsets.UTF_8);
