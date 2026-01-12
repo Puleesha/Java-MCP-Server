@@ -2,7 +2,7 @@ This project represents one of the four MCP server variants made for the Final Y
 
 More specifically, this is the: <h2>Baseline Java MCP Server</h2>
 
-This server uses a <strong> sequential apporach </strong> for file reading and cancellation / error handling.
+This server uses a <strong> sequential approach </strong> for file reading and cancellation / error handling.
 
 It includes a mock repository for the file analysis, which include three folders:
 
