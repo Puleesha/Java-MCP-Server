@@ -84,7 +84,7 @@ WORKDIR /app
 COPY pom.xml /app/pom.xml
 RUN mvn -q -DskipTests dependency:go-offline
 
-# Copy sources and build shaded JAR named baseline-mcp-server.jar
+# Copy sources and build shaded JAR named baseline-java-mcp-server.jar
 COPY src /app/src
 RUN mvn -q -DskipTests package
 
@@ -93,13 +93,13 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 
 # Copy final jar
-COPY --from=build /app/target/baseline-mcp-server.jar /app/baseline-mcp-server.jar
+COPY --from=build /app/target/baseline-java-mcp-server.jar /app/baseline-java-mcp-server.jar
 
 # Non-root user
 RUN useradd -m mcpuser && chown -R mcpuser:mcpuser /app
 USER mcpuser
 
 # MCP runs over stdio; no ports needed
-ENTRYPOINT ["java","-Dorg.slf4j.simpleLogger.logFile=System.err","-jar","/app/baseline-mcp-server.jar"]
+ENTRYPOINT ["java","-Dorg.slf4j.simpleLogger.logFile=System.err","-jar","/app/baseline-java-mcp-server.jar"]
 ENV JAVA_TOOL_OPTIONS="-Dorg.slf4j.simpleLogger.logFile=System.err"
-CMD ["java", "-jar", "/app/baseline-mcp-server.jar"]
+CMD ["java", "-jar", "/app/baseline-java-mcp-server.jar"]
