@@ -1,24 +1,25 @@
 package org.example.MockTool;
 
-import org.example.MockTool.ModelRecords.FileStats;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *  This class represent a repository analyser, where it can access files within a folder and return the number of lines and TODOs present.
  *
  * @author  Puleesha Vilhan
  * @since   05/12/2025
- * @version 1.1.0
  */
 public class RepoAnalyser {
 
-    private int fileCount = 0;
+    // TODO: Change this if singleton is used
+    private final AtomicInteger lineCount = new AtomicInteger(0);
+    private final AtomicInteger todoCount = new AtomicInteger(0);
+    private final AtomicInteger fileCount = new AtomicInteger(0);
 
     /**
      * List all the files that have to be analysed
@@ -83,27 +84,32 @@ public class RepoAnalyser {
      *
      * @throws  IOException If the reader throws and error
      */
-    private FileStats analyzeFile(Path file) throws IOException {
-        long lineCount = 0;
-        long todoCount = 0;
+    public void analyzeFile(Path file) throws IOException {
 
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
 
             // Simulate file reading errors every 20 files to test fault containment
-            if (fileCount % 20 == 0)
+            if (fileCount.get() % 20 == 0)
                 throw new IOException("Could not read the file");
 
             while ((line = reader.readLine()) != null) {
-                lineCount++;
+                lineCount.incrementAndGet();
 
                 if (line.contains("TODO"))
-                    todoCount++;
+                    todoCount.incrementAndGet();
 
-                fileCount++;
+                fileCount.incrementAndGet();
             }
         }
+//        return new FileStats(file, lineCount, todoCount);
+    }
 
-        return new FileStats(file, lineCount, todoCount);
+    public AtomicInteger getLineCount() {
+        return lineCount;
+    }
+
+    public AtomicInteger getTodoCount() {
+        return todoCount;
     }
 }

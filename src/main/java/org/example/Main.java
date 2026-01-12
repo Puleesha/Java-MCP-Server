@@ -9,6 +9,7 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import org.example.MockTool.RepoAnalyser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.micrometer.core.instrument.*;
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -50,9 +52,9 @@ public class Main {
             McpServerFeatures.SyncToolSpecification analyzeRepoBaseline =
                     McpServerFeatures.SyncToolSpecification.builder()
                             .tool(new McpSchema.Tool(
-                                    "analyze_repo_baseline",
-                                    "Analyze a repository using the baseline (non-threaded) server variant.",
-                                    "Takes maxFiles and returns a summary. (Implementation ignored for now.)",
+                                    "analyse_java_repo(Java_Baseline)",
+                                    "Analyze the java files using the Java baseline server variant.",
+                                    "Takes maxFiles and returns a summary of the number of lines and TODOs of selected files",
                                     schema,
                                     null,
                                     null,
@@ -66,6 +68,20 @@ public class Main {
                                 // If this doesn't compile, check the getters and adjust accordingly.
                                 Map<String, Object> arguments = toolReq.arguments();
                                 int maxFiles = ((Number) arguments.get("maxFiles")).intValue();
+
+                                // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
+                                RepoAnalyser repoAnalyser = new RepoAnalyser();
+
+                                List<Path> filePaths = repoAnalyser.analyzeRepository("./MockRepository/Java", ".java", maxFiles);
+
+                                for (Path path : filePaths) {
+                                    try {
+                                        repoAnalyser.analyzeFile(path);
+                                    } catch (IOException e) {
+                                        // Create custom exception if needed
+                                        throw new RuntimeException(e);
+                                    }
+                                }
 
                                 log.info("Baseline tool called with maxFiles={}", maxFiles);
 
