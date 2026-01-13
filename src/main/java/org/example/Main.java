@@ -49,52 +49,52 @@ public class Main {
                     Map.of()
             );
 
-            McpServerFeatures.SyncToolSpecification analyzeRepoBaseline =
-                    McpServerFeatures.SyncToolSpecification.builder()
-                            .tool(new McpSchema.Tool(
-                                    "analyse_java_repo_JB",
-                                    "Analyze the java files using the Java baseline server variant.",
-                                    "Takes maxFiles and returns a summary of the number of lines and TODOs of selected files",
-                                    schema,
-                                    null,
-                                    null,
-                                    null
-                            ))
-                            .callHandler((exchange, toolReq) -> {
-                                // Read maxFiles from the tool call arguments
-                                // NOTE: depending on SDK version, arguments may be exposed as:
-                                // - toolReq.arguments()
-                                // - toolReq.params().arguments()
-                                // If this doesn't compile, check the getters and adjust accordingly.
-                                Map<String, Object> arguments = toolReq.arguments();
-                                int maxFiles = ((Number) arguments.get("maxFiles")).intValue();
+            McpServerFeatures.SyncToolSpecification analyzeRepoBaseline = McpServerFeatures.SyncToolSpecification.builder()
+                    .tool(new McpSchema.Tool(
+                            "analyze_java_files_JB",
+                            "analyze_java_files_JB",
+                            "Returns the number of lines and TODOs of selected files",
+                            schema,
+                            null,
+                            null,
+                            null
+                    ))
+                    .callHandler((exchange, toolReq) -> {
+                        // Read maxFiles from the tool call arguments
+                        // NOTE: depending on SDK version, arguments may be exposed as:
+                        // - toolReq.arguments()
+                        // - toolReq.params().arguments()
+                        // If this doesn't compile, check the getters and adjust accordingly.
 
-                                // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
-                                RepoAnalyser repoAnalyser = new RepoAnalyser();
+                        Map<String, Object> arguments = toolReq.arguments();
+                        int maxFiles = ((Number) arguments.get("maxFiles")).intValue();
 
-                                List<Path> filePaths = repoAnalyser.analyzeRepository("./MockRepository/Java", ".java", maxFiles);
+                        // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
+                        RepoAnalyser repoAnalyser = new RepoAnalyser();
 
-                                for (Path path : filePaths) {
-                                    try {
-                                        repoAnalyser.analyzeFile(path);
-                                    } catch (IOException e) {
-                                        log.error("Server error", e);
-                                        System.exit(1);;
-                                    }
-                                }
+                        List<Path> filePaths = repoAnalyser.analyzeRepository("./MockRepository/Java", ".java", maxFiles);
 
-                                log.info("Baseline tool called with maxFiles={}", maxFiles);
+                        for (Path path : filePaths) {
+                            try {
+                                repoAnalyser.analyzeFile(path);
+                            } catch (IOException e) {
+                                log.error("Server error", e);
+                                System.exit(1);
+                            }
+                        }
 
-                                return McpSchema.CallToolResult.builder()
-                                        .addTextContent("OK (baseline). maxFiles=" + maxFiles)
-                                        .isError(false)
-                                        .build();
+                        log.info("Baseline tool called with maxFiles={}", maxFiles);
 
-                                /*
-                                 *
-                                 * The Metics and other prometheus and grafana stuff
-                                 *
-                                 */
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent("Lines = " + repoAnalyser.getLineCount() + " and TODOs: " + repoAnalyser.getTodoCount())
+                                .isError(false)
+                                .build();
+
+                        /*
+                         *
+                         * The Metics and other prometheus and grafana stuff
+                         *
+                         */
 
 //                                active.incrementAndGet();
 //                                long start = System.nanoTime();
@@ -118,8 +118,8 @@ public class Main {
 //                                    reqLatency.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
 //                                    active.decrementAndGet();
 //                                }
-                            })
-                            .build();
+                    })
+                    .build();
 
             McpSyncServer server = McpServer.sync(transport)
                     .serverInfo("baseline-java-mcp", "1.0.0")
