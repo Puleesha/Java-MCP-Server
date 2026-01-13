@@ -92,6 +92,9 @@ RUN mvn -q -DskipTests package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
+# Allow the server to access the mock repository
+COPY MockRepository /app/MockRepository
+
 # Copy final jar
 COPY --from=build /app/target/baseline-java-mcp-server.jar /app/baseline-java-mcp-server.jar
 
@@ -102,4 +105,3 @@ USER mcpuser
 # MCP runs over stdio; no ports needed
 ENTRYPOINT ["java","-Dorg.slf4j.simpleLogger.logFile=System.err","-jar","/app/baseline-java-mcp-server.jar"]
 ENV JAVA_TOOL_OPTIONS="-Dorg.slf4j.simpleLogger.logFile=System.err"
-CMD ["java", "-jar", "/app/baseline-java-mcp-server.jar"]

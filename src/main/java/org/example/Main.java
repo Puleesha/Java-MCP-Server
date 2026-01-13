@@ -35,66 +35,69 @@ public class Main {
 
             // Tool input schema: { "maxFiles": <int> }
             McpSchema.JsonSchema schema = new McpSchema.JsonSchema(
-                    "object",
-                    Map.of(
-                            "maxFiles", Map.of(
-                                    "type", "integer",
-                                    "minimum", 1,
-                                    "description", "Maximum number of files to analyze"
-                            )
-                    ),
-                    List.of("maxFiles"),
-                    false,
-                    Map.of(),
-                    Map.of()
+                "object",
+                Map.of(
+                    "maxFiles", Map.of(
+                        "type", "integer",
+                        "minimum", 1,
+                        "description", "Maximum number of files to analyze"
+                    )
+                ),
+                List.of("maxFiles"),
+                false,
+                Map.of(),
+                Map.of()
             );
 
             McpServerFeatures.SyncToolSpecification analyzeRepoBaseline = McpServerFeatures.SyncToolSpecification.builder()
-                    .tool(new McpSchema.Tool(
-                            "analyze_java_files_JB",
-                            "analyze_java_files_JB",
-                            "Returns the number of lines and TODOs of selected files",
-                            schema,
-                            null,
-                            null,
-                            null
-                    ))
-                    .callHandler((exchange, toolReq) -> {
-                        // Read maxFiles from the tool call arguments
-                        // NOTE: depending on SDK version, arguments may be exposed as:
-                        // - toolReq.arguments()
-                        // - toolReq.params().arguments()
-                        // If this doesn't compile, check the getters and adjust accordingly.
+                .tool(new McpSchema.Tool(
+                    "analyze_java_files_JB",
+                    "analyze_java_files_JB",
+                    "Returns the number of lines and TODOs of selected files",
+                    schema,
+                    null,
+                    null,
+                    null
+                ))
+                .callHandler((exchange, toolReq) -> {
+                    // Read maxFiles from the tool call arguments
+                    // NOTE: depending on SDK version, arguments may be exposed as:
+                    // - toolReq.arguments()
+                    // - toolReq.params().arguments()
+                    // If this doesn't compile, check the getters and adjust accordingly.
 
-                        Map<String, Object> arguments = toolReq.arguments();
-                        int maxFiles = ((Number) arguments.get("maxFiles")).intValue();
+                    Map<String, Object> arguments = toolReq.arguments();
+                    int maxFiles = ((Number) arguments.get("maxFiles")).intValue();
 
-                        // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
-                        RepoAnalyser repoAnalyser = new RepoAnalyser();
+                    // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
+                    RepoAnalyser repoAnalyser = new RepoAnalyser();
 
-                        List<Path> filePaths = repoAnalyser.analyzeRepository("./MockRepository/Java", ".java", maxFiles);
+                    List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/JavaFiles", ".java", maxFiles);
 
-                        for (Path path : filePaths) {
-                            try {
-                                repoAnalyser.analyzeFile(path);
-                            } catch (IOException e) {
-                                log.error("Server error", e);
-                                System.exit(1);
-                            }
+                    for (Path path : filePaths) {
+                        try {
+                            repoAnalyser.analyzeFile(path);
+                        } catch (IOException e) {
+                            log.error("Server error", e);
+                            System.exit(1);
                         }
+                    }
 
-                        log.info("Baseline tool called with maxFiles={}", maxFiles);
+                    log.info("Baseline tool called with maxFiles={}", maxFiles);
 
-                        return McpSchema.CallToolResult.builder()
-                                .addTextContent("Lines = " + repoAnalyser.getLineCount() + " and TODOs: " + repoAnalyser.getTodoCount())
-                                .isError(false)
-                                .build();
+                    return McpSchema.CallToolResult.builder()
+                        .addTextContent(
+                            "Lines = " + repoAnalyser.getLineCount() +
+                            " and TODOs: " + repoAnalyser.getTodoCount() +
+                            " Max Files: " + maxFiles)
+                        .isError(false)
+                        .build();
 
-                        /*
-                         *
-                         * The Metics and other prometheus and grafana stuff
-                         *
-                         */
+                    /*
+                     *
+                     * The Metics and other prometheus and grafana stuff
+                     *
+                     */
 
 //                                active.incrementAndGet();
 //                                long start = System.nanoTime();
@@ -118,8 +121,8 @@ public class Main {
 //                                    reqLatency.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
 //                                    active.decrementAndGet();
 //                                }
-                    })
-                    .build();
+                })
+                .build();
 
             McpSyncServer server = McpServer.sync(transport)
                     .serverInfo("baseline-java-mcp", "1.0.0")

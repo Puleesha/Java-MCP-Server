@@ -89,9 +89,11 @@ public class RepoAnalyser {
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
 
-            // Simulate file reading errors every 20 files to test fault containment
-            if (fileCount.get() % 20 == 0)
-                throw new IOException("Could not read the file");
+            // TODO: Add a Thread sleep
+            // TODO: Check ALFWorld, WebShop, and GAIA
+//            // Simulate file reading errors every 20 files to test fault containment
+//            if (fileCount.get() % 20 == 0)
+//                throw new IOException("Could not read the file");
 
             while ((line = reader.readLine()) != null) {
                 lineCount.incrementAndGet();
