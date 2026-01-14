@@ -9,7 +9,6 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
-import org.example.MockTool.RepoAnalyser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.micrometer.core.instrument.*;
@@ -19,7 +18,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -33,17 +31,17 @@ public class Main {
             JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(new ObjectMapper());
             StdioServerTransportProvider transport = new StdioServerTransportProvider(mapper);
 
-            // Tool input schema: { "maxFiles": <int> }
+            // Tool input schema: { "limit": <int> }
             McpSchema.JsonSchema schema = new McpSchema.JsonSchema(
                 "object",
                 Map.of(
-                    "maxFiles", Map.of(
+                    "limit", Map.of(
                         "type", "integer",
                         "minimum", 1,
                         "description", "Maximum number of files to analyze"
                     )
                 ),
-                List.of("maxFiles"),
+                List.of("limit"),
                 false,
                 Map.of(),
                 Map.of()
@@ -60,36 +58,19 @@ public class Main {
                     null
                 ))
                 .callHandler((exchange, toolReq) -> {
-                    // Read maxFiles from the tool call arguments
+                    // Read limit from the tool call arguments
                     // NOTE: depending on SDK version, arguments may be exposed as:
                     // - toolReq.arguments()
                     // - toolReq.params().arguments()
                     // If this doesn't compile, check the getters and adjust accordingly.
 
                     Map<String, Object> arguments = toolReq.arguments();
-                    int maxFiles = ((Number) arguments.get("maxFiles")).intValue();
+                    int limit = ((Number) arguments.get("limit")).intValue();
 
-                    // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
-                    RepoAnalyser repoAnalyser = new RepoAnalyser();
-
-                    List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/JavaFiles", ".java", maxFiles);
-
-                    for (Path path : filePaths) {
-                        try {
-                            repoAnalyser.analyzeFile(path);
-                        } catch (IOException e) {
-                            log.error("Server error", e);
-                            System.exit(1);
-                        }
-                    }
-
-                    log.info("Baseline tool called with maxFiles={}", maxFiles);
+                    String result = RequestScope.analyseRepoTool(limit);
 
                     return McpSchema.CallToolResult.builder()
-                        .addTextContent(
-                            "Lines = " + repoAnalyser.getLineCount() +
-                            " and TODOs: " + repoAnalyser.getTodoCount() +
-                            " Max Files: " + maxFiles)
+                        .addTextContent(result)
                         .isError(false)
                         .build();
 
@@ -104,8 +85,8 @@ public class Main {
 //                                reqTotal.increment();
 //
 //                                try {
-//                                    // TODO: parse args (maxFiles) and call analyzer later
-//                                    // int maxFiles = ((Number) toolReq.arguments().get("maxFiles")).intValue();
+//                                    // TODO: parse args (limit) and call analyzer later
+//                                    // int limit = ((Number) toolReq.arguments().get("limit")).intValue();
 //
 //                                    return McpSchema.CallToolResult.builder()
 //                                            .addTextContent("OK")
