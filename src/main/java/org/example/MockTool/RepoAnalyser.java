@@ -21,6 +21,7 @@ public class RepoAnalyser {
     private final AtomicInteger todoCount = new AtomicInteger(0);
     private final AtomicInteger fileCount = new AtomicInteger(0);
 
+    private ArrayList<String> TODOs = new ArrayList<>();
     /**
      * List all the files that have to be analysed
      *
@@ -90,21 +91,22 @@ public class RepoAnalyser {
             String line;
 
             // TODO: Add a Thread sleep
-            // TODO: Check ALFWorld, WebShop, and GAIA
-//            // Simulate file reading errors every 20 files to test fault containment
-//            if (fileCount.get() % 20 == 0)
-//                throw new IOException("Could not read the file");
 
             while ((line = reader.readLine()) != null) {
                 lineCount.incrementAndGet();
 
-                if (line.contains("TODO"))
+                if (line.contains("TODO")) {
+                    addTODO(line);
                     todoCount.incrementAndGet();
-
+                }
                 fileCount.incrementAndGet();
             }
         }
 //        return new FileStats(file, lineCount, todoCount);
+    }
+
+    private synchronized void addTODO(String line) {
+        TODOs.add(line);
     }
 
     public AtomicInteger getLineCount() {
@@ -113,5 +115,9 @@ public class RepoAnalyser {
 
     public AtomicInteger getTodoCount() {
         return todoCount;
+    }
+
+    public String getTODOs() {
+        return TODOs.toString();
     }
 }
