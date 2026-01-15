@@ -95,7 +95,7 @@ public class Main {
                     null
                 ))
                 .callHandler((exchange, toolReq) -> {
-                    // ---- metrics instrumentation (only addition) ----
+                    // ----- metrics instrumentation (only addition) -----
                     reqTotal.increment();
                     active.incrementAndGet();
                     Timer.Sample sample = Timer.start(registry);
