@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class RequestScope {
     private static final Logger log = LoggerFactory.getLogger(RequestScope.class);
@@ -14,6 +15,8 @@ public class RequestScope {
     public static String analyseRepoTool(int limit) {
         // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
         RepoAnalyser repoAnalyser = new RepoAnalyser();
+
+        long timeoutDuration = TimeUnit.SECONDS.toNanos(5); // 5-second timeout period
 
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java", limit);
 

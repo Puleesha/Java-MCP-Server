@@ -2,6 +2,9 @@ package org.example;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
@@ -11,8 +14,6 @@ import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import io.micrometer.core.instrument.*;
-import io.micrometer.prometheusmetrics.PrometheusConfig;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -20,14 +21,50 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
+        HttpServer metricsServer = null;
+
         try {
+            // -------------------------
+            // Prometheus (PULL) metrics
+            // -------------------------
+            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+
+            Counter reqTotal = Counter.builder("mcp_tool_requests_total")
+                    .description("Total tool calls received")
+                    .register(registry);
+
+            Counter reqErrors = Counter.builder("mcp_tool_request_errors_total")
+                    .description("Total tool calls failed")
+                    .register(registry);
+
+            Timer reqLatency = Timer.builder("mcp_tool_request_duration_seconds")
+                    .description("Tool call duration in seconds")
+                    .publishPercentileHistogram()
+                    .register(registry);
+
+            AtomicInteger active = new AtomicInteger(0);
+            registry.gauge("mcp_active_requests", active);
+
+            metricsServer = startMetricsHttpServer(registry);
+
+            // Stop metrics server on shutdown (nice-to-have)
+            HttpServer finalMetricsServer = metricsServer;
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try {
+                    if (finalMetricsServer != null) finalMetricsServer.stop(0);
+                } catch (Exception ignored) {}
+            }));
+
+            // -------------------------
+            // MCP server (your logic)
+            // -------------------------
             JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(new ObjectMapper());
             StdioServerTransportProvider transport = new StdioServerTransportProvider(mapper);
 
@@ -58,50 +95,32 @@ public class Main {
                     null
                 ))
                 .callHandler((exchange, toolReq) -> {
-                    // Read limit from the tool call arguments
-                    // NOTE: depending on SDK version, arguments may be exposed as:
-                    // - toolReq.arguments()
-                    // - toolReq.params().arguments()
-                    // If this doesn't compile, check the getters and adjust accordingly.
+                    // ---- metrics instrumentation (only addition) ----
+                    reqTotal.increment();
+                    active.incrementAndGet();
+                    Timer.Sample sample = Timer.start(registry);
 
-                    Map<String, Object> arguments = toolReq.arguments();
-                    int limit = ((Number) arguments.get("limit")).intValue();
+                    try {
+                        // ---- your MCP logic untouched ----
+                        Map<String, Object> arguments = toolReq.arguments();
+                        int limit = ((Number) arguments.get("limit")).intValue();
 
-                    String result = RequestScope.analyseRepoTool(limit);
+                        String result = RequestScope.analyseRepoTool(limit);
 
-                    return McpSchema.CallToolResult.builder()
-                        .addTextContent(result)
-                        .isError(false)
-                        .build();
-
-                    /*
-                     *
-                     * The Metics and other prometheus and grafana stuff
-                     *
-                     */
-
-//                                active.incrementAndGet();
-//                                long start = System.nanoTime();
-//                                reqTotal.increment();
-//
-//                                try {
-//                                    // TODO: parse args (limit) and call analyzer later
-//                                    // int limit = ((Number) toolReq.arguments().get("limit")).intValue();
-//
-//                                    return McpSchema.CallToolResult.builder()
-//                                            .addTextContent("OK")
-//                                            .isError(false)
-//                                            .build();
-//                                } catch (Exception e) {
-//                                    reqErrors.increment();
-//                                    return McpSchema.CallToolResult.builder()
-//                                            .addTextContent("ERROR: " + e.getMessage())
-//                                            .isError(true)
-//                                            .build();
-//                                } finally {
-//                                    reqLatency.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
-//                                    active.decrementAndGet();
-//                                }
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent(result)
+                                .isError(false)
+                                .build();
+                    } catch (Exception e) {
+                        reqErrors.increment();
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent("ERROR: " + e.getMessage())
+                                .isError(true)
+                                .build();
+                    } finally {
+                        sample.stop(reqLatency);
+                        active.decrementAndGet();
+                    }
                 })
                 .build();
 
@@ -117,6 +136,7 @@ public class Main {
 
             log.info("Baseline MCP Server ready (stdio). Waiting for calls...");
 
+            // Keep alive for the gateway session
             synchronized (Main.class) {
                 Main.class.wait();
             }
@@ -127,51 +147,49 @@ public class Main {
         }
         catch (Exception e) {
             log.error("Server error", e);
+
+            if (metricsServer != null)
+                try { metricsServer.stop(0); } catch (Exception ignored) {}
+
             System.exit(1);
         }
+    }
 
-        /*
-         *
-         * The Metics and other prometheus and grafana stuff
-         *
-         */
+    // Uses system property -DMETRICS_PORT=9100, or env METRICS_PORT, default 9100.
+    private static HttpServer startMetricsHttpServer(PrometheusMeterRegistry registry) throws IOException {
+        int port = getIntConfig("METRICS_PORT", 9100);
 
-        PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        // 0.0.0.0 so Prometheus outside the container can scrape it
+        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
 
-        // Minimal metrics you need
-        Counter reqTotal = Counter.builder("mcp_tool_requests_total")
-                .description("Total tool calls received")
-                .register(registry);
-
-        Counter reqErrors = Counter.builder("mcp_tool_request_errors_total")
-                .description("Total tool calls failed")
-                .register(registry);
-
-        Timer reqLatency = Timer.builder("mcp_tool_request_duration")
-                .description("Tool call duration")
-                .publishPercentileHistogram()
-                .register(registry);
-
-        AtomicInteger active = registry.gauge("mcp_active_requests", new java.util.concurrent.atomic.AtomicInteger(0));
-
-        // Start a tiny HTTP metrics server
-        int metricsPort = Integer.parseInt(System.getProperty("METRICS_PORT", "9100"));
-        HttpServer metricsServer = null;
-        try {
-            metricsServer = HttpServer.create(new InetSocketAddress(metricsPort), 0);
-        } catch (IOException e) {
-            log.error("Server error", e);
-            System.exit(1);
-        }
-        metricsServer.createContext("/metrics", exchange -> {
+        server.createContext("/metrics", exchange -> {
             byte[] body = registry.scrape().getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "text/plain; version=0.0.4");
+            exchange.getResponseHeaders().add("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
             exchange.sendResponseHeaders(200, body.length);
-            try (OutputStream os = exchange.getResponseBody()) { os.write(body); }
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
         });
-        metricsServer.setExecutor(Executors.newSingleThreadExecutor());
-        metricsServer.start();
 
-        log.info("Metrics server running on http://localhost:{}/metrics", metricsPort);
+        server.setExecutor(Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "metrics-http");
+            t.setDaemon(true); // don't prevent shutdown
+            return t;
+        }));
+
+        server.start();
+        log.info("Metrics server running on http://0.0.0.0:{}/metrics", port);
+        return server;
+    }
+
+    private static int getIntConfig(String key, int defaultValue) {
+        String v = System.getProperty(key);
+        if (v == null || v.isBlank()) v = System.getenv(key);
+        if (v == null || v.isBlank()) return defaultValue;
+        try {
+            return Integer.parseInt(v.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 }
