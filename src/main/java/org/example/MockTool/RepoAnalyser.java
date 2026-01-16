@@ -1,11 +1,17 @@
 package org.example.MockTool;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -17,30 +23,29 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RepoAnalyser {
 
     // TODO: Change this if singleton is used
-    private final AtomicInteger lineCount = new AtomicInteger(0);
     private final AtomicInteger todoCount = new AtomicInteger(0);
     private final AtomicInteger fileCount = new AtomicInteger(0);
-
     private ArrayList<String> TODOs = new ArrayList<>();
+
     /**
      * List all the files that have to be analysed
      *
      * @param   folderPath The folder path of the repository
      * @param   typeExtension The language of the files to be analysed by the server
-     * @param   maxFiles The max number of files to be scanned
      *
-     * @return  A list of the paths of all files
+     * @return  A Queue of the paths of all files
      */
-    public List<Path> analyzeRepository(String folderPath, String typeExtension, int maxFiles) {
+    public Queue<Path> analyzeRepository(String folderPath, String typeExtension) {
 
         Path rootDir = Paths.get(folderPath);
+        // TODO: Make one tool that'll scan all file types no need to make many tools
         List<String> fileType = List.of(typeExtension);
         //  Send one of these as a parameter
         //   ".java", ".kt", ".rs", ".ts", ".js"
 
-        List<Path> filesToAnalyze = new ArrayList<>();
+        Queue<Path> filesToAnalyze = new LinkedList<>();
         try {
-            filesToAnalyze = discoverFiles(rootDir, maxFiles, fileType);
+            filesToAnalyze = discoverFiles(rootDir, fileType);
         }
         catch (IOException e) {
             e.printStackTrace();
@@ -49,17 +54,15 @@ public class RepoAnalyser {
         return filesToAnalyze;
     }
 
-    private List<Path> discoverFiles(Path rootDir,
-                                     int maxFiles,
+    private Queue<Path> discoverFiles(Path rootDir,
                                      List<String> extensions) throws IOException {
-        List<Path> result = new ArrayList<>();
+        Queue<Path> result = new LinkedList<>();
 
         try (var stream = Files.walk(rootDir)) {
             stream
                     .filter(Files::isRegularFile)
                     .filter(path -> hasAllowedExtension(path, extensions))
                     .sorted()   // Return the same set of files for every function call
-                    .limit(maxFiles)
                     .forEach(result::add);
         }
 
@@ -80,41 +83,40 @@ public class RepoAnalyser {
      * This method analyses the file and will be called sequentially or concurrently based on the server variant
      *
      * @param   file The path of the file
+     * @param   latch The countdown latch
+     * @param   limit The number of TODOs to be retrieved
      *
      * @return  The number of lines and TODOs in a Java record format
      *
      * @throws  IOException If the reader throws and error
      */
-    public void analyzeFile(Path file) throws IOException {
+    public void analyzeFile(Path file, CountDownLatch latch, int limit) throws IOException {
 
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
+            fileCount.incrementAndGet();
 
-            // TODO: Add a Thread sleep
-
-            while ((line = reader.readLine()) != null) {
-                lineCount.incrementAndGet();
-
+            // TODO: Add a Thread sleep if needed
+            while (((line = reader.readLine()) != null) && todoCount.get() < limit) {
                 if (line.contains("TODO")) {
                     addTODO(line);
-                    todoCount.incrementAndGet();
+                    latch.countDown();
                 }
-                fileCount.incrementAndGet();
             }
         }
-//        return new FileStats(file, lineCount, todoCount);
     }
 
     private synchronized void addTODO(String line) {
-        TODOs.add(line);
+        todoCount.incrementAndGet();
+        TODOs.add(line.replace("//", " "));
     }
 
-    public AtomicInteger getLineCount() {
-        return lineCount;
+    public AtomicInteger getFileCount() {
+        return fileCount;
     }
 
-    public AtomicInteger getTodoCount() {
-        return todoCount;
+    public int getTodoCount() {
+        return todoCount.get();
     }
 
     public String getTODOs() {

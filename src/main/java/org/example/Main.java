@@ -58,7 +58,7 @@ public class Main {
             HttpServer finalMetricsServer = metricsServer;
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
-                    if (finalMetricsServer != null) finalMetricsServer.stop(0);
+                    finalMetricsServer.stop(0);
                 } catch (Exception ignored) {}
             }));
 
@@ -111,13 +111,15 @@ public class Main {
                                 .addTextContent(result)
                                 .isError(false)
                                 .build();
-                    } catch (Exception e) {
+                    }
+                    catch (Exception e) {
                         reqErrors.increment();
                         return McpSchema.CallToolResult.builder()
                                 .addTextContent("ERROR: " + e.getMessage())
                                 .isError(true)
                                 .build();
-                    } finally {
+                    }
+                    finally {
                         sample.stop(reqLatency);
                         active.decrementAndGet();
                     }
@@ -157,7 +159,7 @@ public class Main {
 
     // Uses system property -DMETRICS_PORT=9100, or env METRICS_PORT, default 9100.
     private static HttpServer startMetricsHttpServer(PrometheusMeterRegistry registry) throws IOException {
-        int port = getIntConfig("METRICS_PORT", 9100);
+        int port = getIntConfig();
 
         // 0.0.0.0 so Prometheus outside the container can scrape it
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
@@ -182,14 +184,14 @@ public class Main {
         return server;
     }
 
-    private static int getIntConfig(String key, int defaultValue) {
-        String v = System.getProperty(key);
-        if (v == null || v.isBlank()) v = System.getenv(key);
-        if (v == null || v.isBlank()) return defaultValue;
+    private static int getIntConfig() {
+        String v = System.getProperty("METRICS_PORT");
+        if (v == null || v.isBlank()) v = System.getenv("METRICS_PORT");
+        if (v == null || v.isBlank()) return 9100;
         try {
             return Integer.parseInt(v.trim());
         } catch (NumberFormatException e) {
-            return defaultValue;
+            return 9100;
         }
     }
 }

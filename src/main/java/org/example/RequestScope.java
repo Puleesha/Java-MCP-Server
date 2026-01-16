@@ -6,7 +6,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class RequestScope {
@@ -16,23 +19,33 @@ public class RequestScope {
         // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
         RepoAnalyser repoAnalyser = new RepoAnalyser();
 
-        long timeoutDuration = TimeUnit.SECONDS.toNanos(5); // 5-second timeout period
+        Queue<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java", limit);
+        ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
+        CountDownLatch latch = new CountDownLatch(limit);
 
-        for (Path path : filePaths) {
-            try {
-                repoAnalyser.analyzeFile(path);
-            } catch (IOException e) {
-                log.error("Server error", e);
-                e.printStackTrace();
-            }
+        while ((repoAnalyser.getTodoCount() < limit) && !filePaths.isEmpty()) {
+            executorService.submit(() -> {
+                try {
+                    repoAnalyser.analyzeFile(filePaths.poll(), latch, limit);
+                } catch (IOException e) {
+                    log.error("Server error", e);
+                    e.printStackTrace();
+                }
+            });
         }
 
-        log.info("Baseline tool called with limit of = {}", limit);
+        try {
+            latch.await(5, TimeUnit.SECONDS);
+        }
+        catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
-        return "Lines = " + repoAnalyser.getLineCount() +
-                " and TODOs: " + repoAnalyser.getTODOs() +
-                " Max Files: " + limit;
+        executorService.shutdown();
+        log.info("Baseline tool called with limit of = {} TODOs", limit);
+
+        return "TODOs found = " + repoAnalyser.getTODOs() +
+                ". Scanned " + repoAnalyser.getFileCount() + " files";
     }
 }
