@@ -83,7 +83,7 @@ public class Main {
                 }
 
                 log.info("Bench complete: " + n + " iterations");
-                Thread.sleep(2000); // give Prometheus time to scrape once
+                Thread.sleep(20000); // give Prometheus time to scrape once
                 return;
             }
 
