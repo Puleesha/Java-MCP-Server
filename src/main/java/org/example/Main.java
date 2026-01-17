@@ -63,7 +63,32 @@ public class Main {
             }));
 
             // -------------------------
-            // MCP server (your logic)
+            // This section runs for benchmarking purposes
+            // -------------------------
+            if (args.length > 0 && args[0].equals("--bench")) {
+                int n = Integer.parseInt(args[1]);      // number of iterations
+                int limit = Integer.parseInt(args[3]);  // expects --limit X
+
+                for (int i = 0; i < n; i++) {
+                    // TODO: add all necessary metrics to this section
+                    Timer.Sample sample = Timer.start(registry);
+                    try {
+                        RequestScope.analyseRepoTool(limit);
+                        reqTotal.increment();
+                    } catch (Exception e) {
+                        reqErrors.increment();
+                    } finally {
+                        sample.stop(reqLatency);
+                    }
+                }
+
+                log.info("Bench complete: " + n + " iterations");
+                Thread.sleep(2000); // give Prometheus time to scrape once
+                return;
+            }
+
+            // -------------------------
+            // MCP server (the tool logic)
             // -------------------------
             JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(new ObjectMapper());
             StdioServerTransportProvider transport = new StdioServerTransportProvider(mapper);
