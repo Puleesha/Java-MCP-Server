@@ -83,26 +83,20 @@ public class RepoAnalyser {
      * This method analyses the file and will be called sequentially or concurrently based on the server variant
      *
      * @param   file The path of the file
-     * @param   latch The countdown latch
      * @param   limit The number of TODOs to be retrieved
-     *
-     * @return  The number of lines and TODOs in a Java record format
      *
      * @throws  IOException If the reader throws and error
      */
-    public void analyzeFile(Path file, CountDownLatch latch, int limit) throws IOException {
+    public void analyzeFile(Path file, int limit) throws IOException {
 
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
             fileCount.incrementAndGet();
 
             // TODO: Add a Thread sleep if needed
-            while (((line = reader.readLine()) != null) && todoCount.get() < limit) {
-                if (line.contains("TODO")) {
+            while (((line = reader.readLine()) != null) && todoCount.get() < limit)
+                if (line.contains("TODO"))
                     addTODO(line);
-                    latch.countDown();
-                }
-            }
         }
     }
 

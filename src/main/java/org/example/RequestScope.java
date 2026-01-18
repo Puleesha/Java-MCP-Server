@@ -6,11 +6,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class RequestScope {
     private static final Logger log = LoggerFactory.getLogger(RequestScope.class);
@@ -18,29 +17,36 @@ public class RequestScope {
     public static String analyseRepoTool(int limit) {
         // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-
         Queue<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
+        // TODO: Try to change executor to try-with-resources
         ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
-        CountDownLatch latch = new CountDownLatch(limit);
+        List<Future<?>> futures = new ArrayList<>();
 
-        while ((repoAnalyser.getTodoCount() < limit) && !filePaths.isEmpty()) {
-            executorService.submit(() -> {
+        for (Path path: filePaths) {
+            futures.add(executorService.submit(() -> {
                 try {
-                    repoAnalyser.analyzeFile(filePaths.poll(), latch, limit);
+                    repoAnalyser.analyzeFile(path, limit);
                 } catch (IOException e) {
                     log.error("Server error", e);
                     e.printStackTrace();
                 }
-            });
+            }));
         }
 
-        try {
-            latch.await(5, TimeUnit.SECONDS);
+        for (Future<?> future: futures) {
+            try {
+                // Prevent any leaked threads from lingering after completion
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
         }
-        catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+
+        // Reasons for removing countdown latch:
+        // 1. latch was placed here so it'll get called only if all futures are done
+        // 2. Therefore, blocking here doesn't really do anything
+        // 3. Also, the latch can decrease performance if the available TODOs < limit, where it just blocks for 5s.
 
         executorService.shutdown();
         log.info("Baseline tool called with limit of = {} TODOs", limit);
