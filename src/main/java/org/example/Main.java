@@ -50,14 +50,18 @@ public class Main {
                     .publishPercentileHistogram()
                     .register(registry);
 
-            DistributionSummary tasksMissedPerRequest = DistributionSummary.builder("tasks_missed_per_request")
-                    .description("Number of tasks missed per request")
+            DistributionSummary todosMissedPerRequest = DistributionSummary.builder("todos_missed_per_request")
+                    .description("Number of TODOs missed per request")
+                    .publishPercentileHistogram()
+                    .register(registry);
+
+            DistributionSummary leakedThreads = DistributionSummary.builder("leaked_threads")
+                    .description("Number of threads running without cancellation")
                     .publishPercentileHistogram()
                     .register(registry);
 
             metricsServer = startMetricsHttpServer(registry);
 
-            // Stop metrics server on shutdown (nice-to-have)
             HttpServer finalMetricsServer = metricsServer;
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
@@ -80,12 +84,15 @@ public class Main {
                         requestScope.analyseRepoTool(limit);
 
                         reqTotal.increment();
-                        tasksMissedPerRequest.record(limit - requestScope.getTodoCount());
+                        todosMissedPerRequest.record(limit - requestScope.getTodoCount());
+                        leakedThreads.record(requestScope.getActiveTasks());
                     }
                     catch (Exception e) {
                         reqErrors.increment();
                     }
                     finally {
+                        // TODO: remove time metric
+                        // TODO: Remove prometheus metrics for the main MCP methods
                         sample.stop(reqLatency);
                     }
                 }
@@ -139,7 +146,7 @@ public class Main {
 
                         RequestScope requestScope = new RequestScope();
                         String result = requestScope.analyseRepoTool(limit);
-                        tasksMissedPerRequest.record(limit - requestScope.getTodoCount());
+                        todosMissedPerRequest.record(limit - requestScope.getTodoCount());
 
                         return McpSchema.CallToolResult.builder()
                                 .addTextContent(result)

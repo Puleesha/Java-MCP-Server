@@ -77,25 +77,20 @@ public class RepoAnalyser {
      *
      * @param   file The path of the file
      * @param   limit The number of TODOs to be retrieved
-     * @param   startTime The time the request was initiated
      *
      * @throws  IOException If the reader throws and error
      * @throws  InterruptedException If the Thread.sleep() is interrupted
      */
-    public void analyzeFile(Path file, int limit, long startTime) throws IOException, InterruptedException {
+    public void analyzeFile(Path file, int limit) throws IOException, InterruptedException {
 
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
             fileCount.incrementAndGet();
 
             // Simulate network latency
-            Thread.sleep(new Random().nextInt(500));
+            Thread.sleep(new Random().nextInt(800));
 
-            while (
-                ((line = reader.readLine()) != null) &&         // File is not empty
-                todoCount.get() < limit &&                      // Limit of tasks not reached
-                System.currentTimeMillis() - startTime < 5000   // Timeout not reached
-            )
+            while (((line = reader.readLine()) != null) && todoCount.get() < limit)
                 if (line.contains("TODO"))
                     addTODO(line);
         }
