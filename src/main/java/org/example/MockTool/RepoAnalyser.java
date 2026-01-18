@@ -4,10 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -18,7 +15,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RepoAnalyser {
 
-    // TODO: Change this if singleton is used
     private final AtomicInteger todoCount = new AtomicInteger(0);
     private final AtomicInteger fileCount = new AtomicInteger(0);
     private ArrayList<String> TODOs = new ArrayList<>();
@@ -50,6 +46,7 @@ public class RepoAnalyser {
         return filesToAnalyze;
     }
 
+    // TODO: Change queue to a list
     private Queue<Path> discoverFiles(Path rootDir,
                                      List<String> extensions) throws IOException {
         Queue<Path> result = new LinkedList<>();
@@ -80,17 +77,25 @@ public class RepoAnalyser {
      *
      * @param   file The path of the file
      * @param   limit The number of TODOs to be retrieved
+     * @param   startTime The time the request was initiated
      *
      * @throws  IOException If the reader throws and error
+     * @throws  InterruptedException If the Thread.sleep() is interrupted
      */
-    public void analyzeFile(Path file, int limit) throws IOException {
+    public void analyzeFile(Path file, int limit, long startTime) throws IOException, InterruptedException {
 
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
             fileCount.incrementAndGet();
 
-            // TODO: Add a Thread sleep if needed
-            while (((line = reader.readLine()) != null) && todoCount.get() < limit)
+            // Simulate network latency
+            Thread.sleep(new Random().nextInt(500));
+
+            while (
+                ((line = reader.readLine()) != null) &&         // File is not empty
+                todoCount.get() < limit &&                      // Limit of tasks not reached
+                System.currentTimeMillis() - startTime < 5000   // Timeout not reached
+            )
                 if (line.contains("TODO"))
                     addTODO(line);
         }

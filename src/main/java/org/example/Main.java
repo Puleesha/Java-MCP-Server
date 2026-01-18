@@ -3,6 +3,7 @@ package org.example;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
@@ -22,35 +23,37 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
         HttpServer metricsServer = null;
+        // TODO: See if its necessary to add metrics for the main MCP method
 
         try {
             // -------------------------
-            // Prometheus (PULL) metrics
+            // Prometheus pull metrics
             // -------------------------
             PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
 
-            Counter reqTotal = Counter.builder("mcp_tool_requests_total")
+            Counter reqTotal = Counter.builder("total_requests")
                     .description("Total tool calls received")
                     .register(registry);
 
-            Counter reqErrors = Counter.builder("mcp_tool_request_errors_total")
+            Counter reqErrors = Counter.builder("total_request_errors")
                     .description("Total tool calls failed")
                     .register(registry);
 
-            Timer reqLatency = Timer.builder("mcp_tool_request_duration_seconds")
+            Timer reqLatency = Timer.builder("request_duration_seconds")
                     .description("Tool call duration in seconds")
                     .publishPercentileHistogram()
                     .register(registry);
 
-            AtomicInteger active = new AtomicInteger(0);
-            registry.gauge("mcp_active_requests", active);
+            DistributionSummary tasksMissedPerRequest = DistributionSummary.builder("tasks_missed_per_request")
+                    .description("Number of tasks missed per request")
+                    .publishPercentileHistogram()
+                    .register(registry);
 
             metricsServer = startMetricsHttpServer(registry);
 
@@ -73,11 +76,16 @@ public class Main {
                     // TODO: add all necessary metrics to this section
                     Timer.Sample sample = Timer.start(registry);
                     try {
-                        RequestScope.analyseRepoTool(limit);
+                        RequestScope requestScope = new RequestScope();
+                        requestScope.analyseRepoTool(limit);
+
                         reqTotal.increment();
-                    } catch (Exception e) {
+                        tasksMissedPerRequest.record(limit - requestScope.getTodoCount());
+                    }
+                    catch (Exception e) {
                         reqErrors.increment();
-                    } finally {
+                    }
+                    finally {
                         sample.stop(reqLatency);
                     }
                 }
@@ -122,7 +130,6 @@ public class Main {
                 .callHandler((exchange, toolReq) -> {
                     // ----- metrics instrumentation (only addition) -----
                     reqTotal.increment();
-                    active.incrementAndGet();
                     Timer.Sample sample = Timer.start(registry);
 
                     try {
@@ -130,7 +137,9 @@ public class Main {
                         Map<String, Object> arguments = toolReq.arguments();
                         int limit = ((Number) arguments.get("limit")).intValue();
 
-                        String result = RequestScope.analyseRepoTool(limit);
+                        RequestScope requestScope = new RequestScope();
+                        String result = requestScope.analyseRepoTool(limit);
+                        tasksMissedPerRequest.record(limit - requestScope.getTodoCount());
 
                         return McpSchema.CallToolResult.builder()
                                 .addTextContent(result)
@@ -146,7 +155,6 @@ public class Main {
                     }
                     finally {
                         sample.stop(reqLatency);
-                        active.decrementAndGet();
                     }
                 })
                 .build();

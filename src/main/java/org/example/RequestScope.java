@@ -13,11 +13,12 @@ import java.util.concurrent.*;
 
 public class RequestScope {
     private static final Logger log = LoggerFactory.getLogger(RequestScope.class);
+    RepoAnalyser repoAnalyser = new RepoAnalyser();
+    // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
 
-    public static String analyseRepoTool(int limit) {
-        // Bcz of the way the Docker MCP gateway works (short bursts of images running) the singleton might be redundant.
-        RepoAnalyser repoAnalyser = new RepoAnalyser();
+    public String analyseRepoTool(int limit) {
         Queue<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
+        long startTime = System.currentTimeMillis();
 
         // TODO: Try to change executor to try-with-resources
         ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
@@ -26,8 +27,8 @@ public class RequestScope {
         for (Path path: filePaths) {
             futures.add(executorService.submit(() -> {
                 try {
-                    repoAnalyser.analyzeFile(path, limit);
-                } catch (IOException e) {
+                    repoAnalyser.analyzeFile(path, limit, startTime);
+                } catch (IOException | InterruptedException e) {
                     log.error("Server error", e);
                     e.printStackTrace();
                 }
@@ -53,5 +54,9 @@ public class RequestScope {
 
         return "TODOs found = " + repoAnalyser.getTODOs() +
                 ". Scanned " + repoAnalyser.getFileCount() + " files";
+    }
+
+    public int getTodoCount() {
+        return repoAnalyser.getTodoCount();
     }
 }
