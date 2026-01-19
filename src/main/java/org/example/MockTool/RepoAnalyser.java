@@ -25,17 +25,13 @@ public class RepoAnalyser {
      * @param   folderPath The folder path of the repository
      * @param   typeExtension The language of the files to be analysed by the server
      *
-     * @return  A Queue of the paths of all files
+     * @return  A List of the paths of all files
      */
-    public Queue<Path> analyzeRepository(String folderPath, String typeExtension) {
+    public List<Path> analyzeRepository(String folderPath, String typeExtension) {
 
-        Path rootDir = Paths.get(folderPath);
-        // TODO: Make one tool that'll scan all file types no need to make many tools
-        List<String> fileType = List.of(typeExtension);
-        //  Send one of these as a parameter
-        //   ".java", ".kt", ".rs", ".ts", ".js"
+        Path rootDir = Paths.get(folderPath);List<String> fileType = List.of(typeExtension);
 
-        Queue<Path> filesToAnalyze = new LinkedList<>();
+        List<Path> filesToAnalyze = new LinkedList<>();
         try {
             filesToAnalyze = discoverFiles(rootDir, fileType);
         }
@@ -46,10 +42,9 @@ public class RepoAnalyser {
         return filesToAnalyze;
     }
 
-    // TODO: Change queue to a list
-    private Queue<Path> discoverFiles(Path rootDir,
+    private List<Path> discoverFiles(Path rootDir,
                                      List<String> extensions) throws IOException {
-        Queue<Path> result = new LinkedList<>();
+        List<Path> result = new LinkedList<>();
 
         try (var stream = Files.walk(rootDir)) {
             stream
