@@ -29,34 +29,49 @@ public class Main {
 
     public static void main(String[] args) {
         HttpServer metricsServer = null;
-        // TODO: See if its necessary to add metrics for the main MCP method
 
         try {
             // -------------------------
             // Prometheus pull metrics
             // -------------------------
+
+            // -------------------------
+            // Create the registry
             PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
 
-            Counter reqTotal = Counter.builder("total_requests")
-                    .description("Total tool calls received")
+            // -------------------------
+            // Request-level counters
+            Counter reqTotal = Counter.builder("requests_total")
+                    .description("Total MCP tool calls received")
                     .register(registry);
 
-            Counter reqErrors = Counter.builder("total_request_errors")
-                    .description("Total tool calls failed")
+            Counter reqErrors = Counter.builder("request_errors_total")
+                    .description("Total MCP tool calls failed")
                     .register(registry);
 
+            // -------------------------
+            // Request latency
             Timer reqLatency = Timer.builder("request_duration_seconds")
-                    .description("Tool call duration in seconds")
+                    .description("End-to-end MCP tool call duration")
+                    .publishPercentileHistogram()
+                    .register(registry);
+
+            // -------------------------
+            // Work completion semantics (per request)
+            DistributionSummary todosCompletedPerRequest = DistributionSummary.builder("todos_completed_per_request")
+                    .description("Number of TODOs completed before return or timeout")
                     .publishPercentileHistogram()
                     .register(registry);
 
             DistributionSummary todosMissedPerRequest = DistributionSummary.builder("todos_missed_per_request")
-                    .description("Number of TODOs missed per request")
+                    .description("Number of TODOs missed due to timeout or cancellation")
                     .publishPercentileHistogram()
                     .register(registry);
 
+            // -------------------------
+            // Execution control / leakage
             DistributionSummary leakedThreads = DistributionSummary.builder("leaked_threads")
-                    .description("Number of threads running without cancellation")
+                    .description("Number of threads still running after request completes")
                     .publishPercentileHistogram()
                     .register(registry);
 
@@ -84,6 +99,7 @@ public class Main {
                         requestScope.analyseRepoTool(limit);
 
                         reqTotal.increment();
+                        todosCompletedPerRequest.record(requestScope.getTodoCount());
                         todosMissedPerRequest.record(limit - requestScope.getTodoCount());
                         leakedThreads.record(requestScope.getActiveTasks());
                     }
@@ -91,8 +107,6 @@ public class Main {
                         reqErrors.increment();
                     }
                     finally {
-                        // TODO: remove time metric
-                        // TODO: Remove prometheus metrics for the main MCP methods
                         sample.stop(reqLatency);
                     }
                 }
