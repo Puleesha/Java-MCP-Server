@@ -92,7 +92,6 @@ public class Main {
                 int limit = Integer.parseInt(args[3]);  // expects --limit X
 
                 for (int i = 0; i < n; i++) {
-                    // TODO: add all necessary metrics to this section
                     Timer.Sample sample = Timer.start(registry);
                     try {
                         RequestScope requestScope = new RequestScope();
