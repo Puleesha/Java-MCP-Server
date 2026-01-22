@@ -39,6 +39,7 @@ public class RequestScope {
                 });
             }
 
+            // TODO: Fix this, it always sleeps for 5 seconds even if request ends early
             Thread.sleep(5000); // Set a timeout for 5 seconds
         }
         catch (InterruptedException e) {
