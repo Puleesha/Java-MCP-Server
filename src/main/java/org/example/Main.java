@@ -140,8 +140,8 @@ public class Main {
 
             McpServerFeatures.SyncToolSpecification analyzeRepoBaseline = McpServerFeatures.SyncToolSpecification.builder()
                 .tool(new McpSchema.Tool(
-                    "analyze_java_files_JB",
-                    "analyze_java_files_JB",
+                    "analyze_repo_JB",
+                    "analyze_repo_JB",
                     "Returns the number of lines and TODOs of selected files",
                     schema,
                     null,

@@ -1,12 +1,11 @@
 package org.example;
 
-import org.example.MockTool.RepoAnalyser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Queue;
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -17,7 +16,7 @@ public class RequestScope {
     RepoAnalyser repoAnalyser = new RepoAnalyser();
 
     public String analyseRepoTool(int limit) {
-        Queue<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
         ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
 
