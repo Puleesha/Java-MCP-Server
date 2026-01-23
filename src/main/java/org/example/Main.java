@@ -94,8 +94,8 @@ public class Main {
                 for (int i = 0; i < n; i++) {
                     Timer.Sample sample = Timer.start(registry);
                     try {
-                        RequestScope requestScope = new RequestScope();
-                        requestScope.analyseRepoTool(limit);
+                        ToolService requestScope = new ToolService();
+                        requestScope.baselineToolProcess(limit);
 
                         reqTotal.increment();
                         todosCompletedPerRequest.record(requestScope.getTodoCount());
@@ -139,9 +139,9 @@ public class Main {
 
             McpServerFeatures.SyncToolSpecification analyzeRepoBaseline = McpServerFeatures.SyncToolSpecification.builder()
                 .tool(new McpSchema.Tool(
-                    "analyze_repo_JB",
-                    "analyze_repo_JB",
-                    "Returns the number of lines and TODOs of selected files",
+                    "java_baseline_analyzer",
+                    "java_baseline_analyzer",
+                    "Returns the TODOs in the repo upto the limit using an unstructured concurrency approach",
                     schema,
                     null,
                     null,
@@ -155,8 +155,8 @@ public class Main {
                         Map<String, Object> arguments = toolReq.arguments();
                         int limit = ((Number) arguments.get("limit")).intValue();
 
-                        RequestScope requestScope = new RequestScope();
-                        String result = requestScope.analyseRepoTool(limit);
+                        ToolService requestScope = new ToolService();
+                        String result = requestScope.baselineToolProcess(limit);
                         todosMissedPerRequest.record(limit - requestScope.getTodoCount());
 
                         return McpSchema.CallToolResult.builder()
@@ -177,6 +177,46 @@ public class Main {
                 })
                 .build();
 
+            McpServerFeatures.SyncToolSpecification analyzeRepoStructured = McpServerFeatures.SyncToolSpecification.builder()
+                    .tool(new McpSchema.Tool(
+                            "java_structured_analyzer",
+                            "java_structured_analyzer",
+                            "Returns the TODOs in the repo upto the limit using a structured concurrency approach",
+                            schema,
+                            null,
+                            null,
+                            null
+                    ))
+                    .callHandler((exchange, toolReq) -> {
+                        reqTotal.increment();
+                        Timer.Sample sample = Timer.start(registry);
+
+                        try {
+                            Map<String, Object> arguments = toolReq.arguments();
+                            int limit = ((Number) arguments.get("limit")).intValue();
+
+                            ToolService requestScope = new ToolService();
+                            String result = requestScope.structuredToolProcess(limit);
+                            todosMissedPerRequest.record(limit - requestScope.getTodoCount());
+
+                            return McpSchema.CallToolResult.builder()
+                                    .addTextContent(result)
+                                    .isError(false)
+                                    .build();
+                        }
+                        catch (Exception e) {
+                            reqErrors.increment();
+                            return McpSchema.CallToolResult.builder()
+                                    .addTextContent("ERROR: " + e.getMessage())
+                                    .isError(true)
+                                    .build();
+                        }
+                        finally {
+                            sample.stop(reqLatency);
+                        }
+                    })
+                    .build();
+
             McpSyncServer server = McpServer.sync(transport)
                     .serverInfo("baseline-java-mcp", "1.0.0")
                     .capabilities(McpSchema.ServerCapabilities.builder()
@@ -184,7 +224,7 @@ public class Main {
                             .logging()
                             .build()
                     )
-                    .tools(List.of(analyzeRepoBaseline))
+                    .tools(List.of(analyzeRepoBaseline, analyzeRepoStructured))
                     .build();
 
             log.info("Baseline MCP Server ready (stdio). Waiting for calls...");
@@ -203,8 +243,6 @@ public class Main {
 
             if (metricsServer != null)
                 try { metricsServer.stop(0); } catch (Exception ignored) {}
-
-            System.exit(1);
         }
     }
 
