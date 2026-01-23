@@ -102,7 +102,7 @@ public class Main {
                         todosMissedPerRequest.record(limit - requestScope.getTodoCount());
                         leakedThreads.record(requestScope.getActiveTasks());
                     }
-                    catch (Exception e) {
+                    catch (InterruptedException e) {
                         reqErrors.increment();
                     }
                     finally {
@@ -148,12 +148,10 @@ public class Main {
                     null
                 ))
                 .callHandler((exchange, toolReq) -> {
-                    // ----- metrics instrumentation (only addition) -----
                     reqTotal.increment();
                     Timer.Sample sample = Timer.start(registry);
 
                     try {
-                        // ---- your MCP logic untouched ----
                         Map<String, Object> arguments = toolReq.arguments();
                         int limit = ((Number) arguments.get("limit")).intValue();
 

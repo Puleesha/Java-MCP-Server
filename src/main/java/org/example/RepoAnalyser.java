@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -72,11 +73,12 @@ public class RepoAnalyser {
      *
      * @param   file The path of the file
      * @param   limit The number of TODOs to be retrieved
+     * @param   latch Countdown latch tracking the number of TODOs found
      *
      * @throws  IOException If the reader throws and error
      * @throws  InterruptedException If the Thread.sleep() is interrupted
      */
-    public void analyzeFile(Path file, int limit) throws IOException, InterruptedException {
+    public void analyzeFile(Path file, int limit, CountDownLatch latch) throws IOException, InterruptedException {
 
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
@@ -87,11 +89,12 @@ public class RepoAnalyser {
 
             while (((line = reader.readLine()) != null) && todoCount.get() < limit)
                 if (line.contains("TODO"))
-                    addTODO(line);
+                    addTODO(line, latch);
         }
     }
 
-    private synchronized void addTODO(String line) {
+    private synchronized void addTODO(String line, CountDownLatch latch)  {
+        latch.countDown();
         todoCount.incrementAndGet();
         TODOs.add(line.replace("//", " "));
     }
