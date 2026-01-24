@@ -28,7 +28,8 @@ public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
-        HttpServer metricsServer = null;
+        HttpServer baselineMetricsServer = null;
+        HttpServer structuredMetricsServer = null;
 
         try {
             // -------------------------
@@ -75,12 +76,16 @@ public class Main {
                     .publishPercentileHistogram()
                     .register(registry);
 
-            metricsServer = startMetricsHttpServer(registry);
+            baselineMetricsServer = startMetricsHttpServer(registry, 9100);
+            structuredMetricsServer = startMetricsHttpServer(registry, 9101);
 
-            HttpServer finalMetricsServer = metricsServer;
+            HttpServer finalBaselineMetrics = baselineMetricsServer;
+            HttpServer finalStructuredMetrics = structuredMetricsServer;
+
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
-                    finalMetricsServer.stop(0);
+                    finalBaselineMetrics.stop(0);
+                    finalStructuredMetrics.stop(0);
                 } catch (Exception ignored) {}
             }));
 
@@ -101,6 +106,25 @@ public class Main {
                         todosCompletedPerRequest.record(requestScope.getTodoCount());
                         todosMissedPerRequest.record(limit - requestScope.getTodoCount());
                         leakedThreads.record(requestScope.getActiveTasks());
+                    }
+                    catch (InterruptedException e) {
+                        reqErrors.increment();
+                    }
+                    finally {
+                        sample.stop(reqLatency);
+                    }
+                }
+
+                for (int i = 0; i < n; i++) {
+                    Timer.Sample sample = Timer.start(registry);
+                    try {
+                        ToolService requestScope = new ToolService();
+                        requestScope.structuredToolProcess(limit);
+
+//                        reqTotal.increment();
+//                        todosCompletedPerRequest.record(requestScope.getTodoCount());
+//                        todosMissedPerRequest.record(limit - requestScope.getTodoCount());
+//                        leakedThreads.record(requestScope.getActiveTasks());
                     }
                     catch (InterruptedException e) {
                         reqErrors.increment();
@@ -241,15 +265,12 @@ public class Main {
         catch (Exception e) {
             log.error("Server error", e);
 
-            if (metricsServer != null)
-                try { metricsServer.stop(0); } catch (Exception ignored) {}
+            if (baselineMetricsServer != null)
+                try { baselineMetricsServer.stop(0); } catch (Exception ignored) {}
         }
     }
 
-    // Uses system property -DMETRICS_PORT=9100, or env METRICS_PORT, default 9100.
-    private static HttpServer startMetricsHttpServer(PrometheusMeterRegistry registry) throws IOException {
-        int port = getIntConfig();
-
+    private static HttpServer startMetricsHttpServer(PrometheusMeterRegistry registry, int port) throws IOException {
         // 0.0.0.0 so Prometheus outside the container can scrape it
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
 
@@ -271,16 +292,5 @@ public class Main {
         server.start();
         log.info("Metrics server running on http://0.0.0.0:{}/metrics", port);
         return server;
-    }
-
-    private static int getIntConfig() {
-        String v = System.getProperty("METRICS_PORT");
-        if (v == null || v.isBlank()) v = System.getenv("METRICS_PORT");
-        if (v == null || v.isBlank()) return 9100;
-        try {
-            return Integer.parseInt(v.trim());
-        } catch (NumberFormatException e) {
-            return 9100;
-        }
     }
 }

@@ -73,17 +73,18 @@ public class ToolService {
 
             latch.await(5000, TimeUnit.SECONDS);
 
-            // Ensure children are done/cancelled before we proceed
+            // Ensure child tasks are done/cancelled before we proceed
             scope.join();
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
-        log.info("Baseline tool called with limit of = {} TODOs", limit);
+        log.info("Structured tool called with limit of = {} TODOs", limit);
 
         // Return whatever we managed to collect so far
-        return "TODOs found = " + repoAnalyser.getTodoCount() + " files";
+        return "TODOs found = " + repoAnalyser.getTODOs() +
+                ". Scanned " + repoAnalyser.getFileCount() + " files";
     }
 
     public int getTodoCount() {
