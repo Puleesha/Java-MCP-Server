@@ -1,5 +1,5 @@
 # ---- Build stage ----
-FROM maven:3.9.9-eclipse-temurin-21 AS build
+FROM maven:3.9.11-eclipse-temurin-25 AS build
 WORKDIR /app
 
 # Copy Maven descriptor first to leverage caching
@@ -11,7 +11,7 @@ COPY src /app/src
 RUN mvn -q -DskipTests package
 
 # ---- Runtime stage ----
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jdk
 WORKDIR /app
 
 # Allow the server to access the mock repository
@@ -25,5 +25,5 @@ RUN useradd -m mcpuser && chown -R mcpuser:mcpuser /app
 USER mcpuser
 
 # MCP runs over stdio; no ports needed
-ENTRYPOINT ["java","-Dorg.slf4j.simpleLogger.logFile=System.err","-jar","/app/java-mcp-server.jar"]
+ENTRYPOINT ["java","--enable-preview","-Dorg.slf4j.simpleLogger.logFile=System.err","-jar","/app/java-mcp-server.jar"]
 ENV JAVA_TOOL_OPTIONS="-Dorg.slf4j.simpleLogger.logFile=System.err"
