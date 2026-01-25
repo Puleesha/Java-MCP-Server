@@ -76,6 +76,7 @@ public class Main {
                     .register(registry);
 
             int port = (args.length > 0 && "baseline".equals(args[5])) ? 9100 : 9101;
+            log.info("Listening on port {}", port);
             metricsServer = startMetricsHttpServer(registry, port);
 
             HttpServer finalMetricsServer = metricsServer;
@@ -233,7 +234,7 @@ public class Main {
                     .tools(List.of(analyzeRepoBaseline, analyzeRepoStructured))
                     .build();
 
-            log.info("Baseline MCP Server ready (stdio). Waiting for calls...");
+            log.info("Java MCP Server ready (stdio). Waiting for calls...");
 
             // Keep alive for the gateway session
             synchronized (Main.class) {
