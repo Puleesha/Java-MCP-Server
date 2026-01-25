@@ -28,8 +28,7 @@ public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
-        HttpServer baselineMetricsServer = null;
-        HttpServer structuredMetricsServer = null;
+        HttpServer metricsServer = null;
 
         try {
             // -------------------------
@@ -76,16 +75,14 @@ public class Main {
                     .publishPercentileHistogram()
                     .register(registry);
 
-            baselineMetricsServer = startMetricsHttpServer(registry, 9100);
-            structuredMetricsServer = startMetricsHttpServer(registry, 9101);
+            int port = (args.length > 0 && "baseline".equals(args[5])) ? 9100 : 9101;
+            metricsServer = startMetricsHttpServer(registry, port);
 
-            HttpServer finalBaselineMetrics = baselineMetricsServer;
-            HttpServer finalStructuredMetrics = structuredMetricsServer;
+            HttpServer finalMetricsServer = metricsServer;
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
-                    finalBaselineMetrics.stop(0);
-                    finalStructuredMetrics.stop(0);
+                    finalMetricsServer.stop(0);
                 } catch (Exception ignored) {}
             }));
 
@@ -95,36 +92,21 @@ public class Main {
             if (args.length > 0 && args[0].equals("--bench")) {
                 int n = Integer.parseInt(args[1]);      // number of iterations
                 int limit = Integer.parseInt(args[3]);  // expects --limit X
+                String mode = args[5];
 
                 for (int i = 0; i < n; i++) {
                     Timer.Sample sample = Timer.start(registry);
                     try {
                         ToolService requestScope = new ToolService();
-                        requestScope.baselineToolProcess(limit);
+                        if ("baseline".equals(mode))
+                            requestScope.baselineToolProcess(limit);
+                        else
+                            requestScope.structuredToolProcess(limit);
 
                         reqTotal.increment();
                         todosCompletedPerRequest.record(requestScope.getTodoCount());
                         todosMissedPerRequest.record(limit - requestScope.getTodoCount());
                         leakedThreads.record(requestScope.getActiveTasks());
-                    }
-                    catch (InterruptedException e) {
-                        reqErrors.increment();
-                    }
-                    finally {
-                        sample.stop(reqLatency);
-                    }
-                }
-
-                for (int i = 0; i < n; i++) {
-                    Timer.Sample sample = Timer.start(registry);
-                    try {
-                        ToolService requestScope = new ToolService();
-                        requestScope.structuredToolProcess(limit);
-
-//                        reqTotal.increment();
-//                        todosCompletedPerRequest.record(requestScope.getTodoCount());
-//                        todosMissedPerRequest.record(limit - requestScope.getTodoCount());
-//                        leakedThreads.record(requestScope.getActiveTasks());
                     }
                     catch (InterruptedException e) {
                         reqErrors.increment();
@@ -265,8 +247,8 @@ public class Main {
         catch (Exception e) {
             log.error("Server error", e);
 
-            if (baselineMetricsServer != null)
-                try { baselineMetricsServer.stop(0); } catch (Exception ignored) {}
+            if (metricsServer != null)
+                try { metricsServer.stop(0); } catch (Exception ignored) {}
         }
     }
 
