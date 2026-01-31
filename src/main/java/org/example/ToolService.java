@@ -37,7 +37,7 @@ public class ToolService {
             });
         }
 
-        latch.await(5000, TimeUnit.SECONDS);
+        latch.await(5, TimeUnit.SECONDS);
         executorService.shutdown();
 
         log.info("Baseline tool called with limit of = {} TODOs", limit);
@@ -71,10 +71,7 @@ public class ToolService {
                 });
             }
 
-            latch.await(5000, TimeUnit.SECONDS);
-
-            // Ensure child tasks are done/cancelled before we proceed
-            scope.join();
+            latch.await(5, TimeUnit.SECONDS);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
