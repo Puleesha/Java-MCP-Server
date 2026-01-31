@@ -22,6 +22,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class Main {
@@ -29,6 +30,7 @@ public class Main {
 
     public static void main(String[] args) {
         HttpServer metricsServer = null;
+        ExecutorService requests = Executors.newCachedThreadPool();
 
         try {
             // -------------------------
@@ -94,27 +96,29 @@ public class Main {
                 int n = Integer.parseInt(args[1]);      // number of iterations
                 int limit = Integer.parseInt(args[3]);  // expects --limit X
                 String mode = args[5];
+                ToolService requestScope = new ToolService();
 
                 for (int i = 0; i < n; i++) {
-                    Timer.Sample sample = Timer.start(registry);
-                    try {
-                        ToolService requestScope = new ToolService();
-                        if ("baseline".equals(mode))
-                            requestScope.baselineToolProcess(limit);
-                        else
-                            requestScope.structuredToolProcess(limit);
+                    requests.execute(() -> {
+                        Timer.Sample sample = Timer.start(registry);
+                        try {
+                            if ("baseline".equals(mode))
+                                requestScope.baselineToolProcess(limit);
+                            else
+                                requestScope.structuredToolProcess(limit);
 
-                        reqTotal.increment();
-                        todosCompletedPerRequest.record(requestScope.getTodoCount());
-                        todosMissedPerRequest.record(limit - requestScope.getTodoCount());
-                        leakedThreads.record(requestScope.getActiveTasks());
-                    }
-                    catch (InterruptedException e) {
-                        reqErrors.increment();
-                    }
-                    finally {
-                        sample.stop(reqLatency);
-                    }
+                            reqTotal.increment();
+                            todosCompletedPerRequest.record(requestScope.getTodoCount());
+                            todosMissedPerRequest.record(limit - requestScope.getTodoCount());
+                            leakedThreads.record(requestScope.getActiveTasks());
+                        }
+                        catch (InterruptedException e) {
+                            reqErrors.increment();
+                        }
+                        finally {
+                            sample.stop(reqLatency);
+                        }
+                    });
                 }
 
                 log.info("Bench complete: " + n + " iterations");

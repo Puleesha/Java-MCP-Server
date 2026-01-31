@@ -11,7 +11,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class ToolService {
     private static final Logger log = LoggerFactory.getLogger(ToolService.class);
+    private final ExecutorService tasks = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
 
+    // TODO: Update metrics to fit new design approach
     AtomicInteger activeTasks = new AtomicInteger(0);
     RepoAnalyser repoAnalyser = new RepoAnalyser();
 
@@ -19,10 +21,9 @@ public class ToolService {
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
         CountDownLatch latch = new CountDownLatch(limit);
-        ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
 
         for (Path path : filePaths) {
-            executorService.submit(() -> {
+            tasks.submit(() -> {
                 activeTasks.incrementAndGet();
                 try {
                     repoAnalyser.analyzeFile(path, limit, latch);
@@ -38,7 +39,6 @@ public class ToolService {
         }
 
         latch.await(5, TimeUnit.SECONDS);
-        executorService.shutdown();
 
         log.info("Baseline tool called with limit of = {} TODOs", limit);
 
@@ -72,8 +72,9 @@ public class ToolService {
             }
 
             latch.await(5, TimeUnit.SECONDS);
-
-        } catch (InterruptedException e) {
+            scope.join();
+        }
+        catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
