@@ -30,7 +30,7 @@ public class Main {
 
     public static void main(String[] args) {
         HttpServer metricsServer = null;
-        ExecutorService requests = Executors.newCachedThreadPool();
+        ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
 
         try {
             // -------------------------
@@ -55,6 +55,7 @@ public class Main {
             // Request latency
             Timer reqLatency = Timer.builder("request_duration_seconds")
                     .description("End-to-end MCP tool call duration")
+                    .tag("limit", args[3])
                     .publishPercentileHistogram()
                     .register(registry);
 
@@ -62,11 +63,13 @@ public class Main {
             // Work completion semantics (per request)
             DistributionSummary todosCompletedPerRequest = DistributionSummary.builder("todos_completed_per_request")
                     .description("Number of TODOs completed before return or timeout")
+                    .tag("limit", args[3])
                     .publishPercentileHistogram()
                     .register(registry);
 
             DistributionSummary todosMissedPerRequest = DistributionSummary.builder("todos_missed_per_request")
                     .description("Number of TODOs missed due to timeout or cancellation")
+                    .tag("limit", args[3])
                     .publishPercentileHistogram()
                     .register(registry);
 
@@ -74,11 +77,13 @@ public class Main {
             // Execution control / leakage
             DistributionSummary leakedThreads = DistributionSummary.builder("leaked_threads")
                     .description("Number of threads still running after request completes")
+                    .tag("limit", args[3])
                     .publishPercentileHistogram()
                     .register(registry);
 
             int port = (args.length > 0 && "baseline".equals(args[5])) ? 9100 : 9101;
             log.info("Listening on port {}", port);
+            registry.config().commonTags("variant", args[5]);
             metricsServer = startMetricsHttpServer(registry, port);
 
             HttpServer finalMetricsServer = metricsServer;
@@ -101,16 +106,18 @@ public class Main {
                 for (int i = 0; i < n; i++) {
                     requests.execute(() -> {
                         Timer.Sample sample = Timer.start(registry);
+                        RequestStats result;
                         try {
                             if ("baseline".equals(mode))
-                                requestScope.baselineToolProcess(limit);
+                                result = requestScope.baselineToolProcess(limit);
                             else
-                                requestScope.structuredToolProcess(limit);
+                                result = requestScope.structuredToolProcess(limit);
 
                             reqTotal.increment();
-                            todosCompletedPerRequest.record(requestScope.getTodoCount());
-                            todosMissedPerRequest.record(limit - requestScope.getTodoCount());
-                            leakedThreads.record(requestScope.getActiveTasks());
+                            todosCompletedPerRequest.record(result.todoCount());
+                            todosMissedPerRequest.record(limit - result.todoCount());
+                            log.info("Active tasks: " + result.activeTasks());
+                            leakedThreads.record(result.activeTasks());
                         }
                         catch (InterruptedException e) {
                             reqErrors.increment();
@@ -167,8 +174,10 @@ public class Main {
                         int limit = ((Number) arguments.get("limit")).intValue();
 
                         ToolService requestScope = new ToolService();
-                        String result = requestScope.baselineToolProcess(limit);
-                        todosMissedPerRequest.record(limit - requestScope.getTodoCount());
+                        RequestStats requestStats = requestScope.baselineToolProcess(limit);
+                        todosMissedPerRequest.record(limit - requestStats.todoCount());
+
+                        String result = "TODOs found = " + requestStats.todoCount() + ". Scanned " + requestStats.filesScanned() + " files";
 
                         return McpSchema.CallToolResult.builder()
                                 .addTextContent(result)
@@ -207,8 +216,10 @@ public class Main {
                             int limit = ((Number) arguments.get("limit")).intValue();
 
                             ToolService requestScope = new ToolService();
-                            String result = requestScope.structuredToolProcess(limit);
-                            todosMissedPerRequest.record(limit - requestScope.getTodoCount());
+                            RequestStats requestStats = requestScope.structuredToolProcess(limit);
+                            todosMissedPerRequest.record(limit - requestStats.todoCount());
+
+                            String result = "TODOs found = " + requestStats.todoCount() + ". Scanned " + requestStats.filesScanned() + " files";
 
                             return McpSchema.CallToolResult.builder()
                                     .addTextContent(result)

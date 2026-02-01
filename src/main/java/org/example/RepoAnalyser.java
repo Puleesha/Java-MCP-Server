@@ -99,8 +99,8 @@ public class RepoAnalyser {
         TODOs.add(line.replace("//", " "));
     }
 
-    public AtomicInteger getFileCount() {
-        return fileCount;
+    public int getFileCount() {
+        return fileCount.get();
     }
 
     public int getTodoCount() {

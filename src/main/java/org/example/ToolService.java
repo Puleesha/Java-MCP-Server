@@ -14,10 +14,10 @@ public class ToolService {
     private final ExecutorService tasks = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
 
     // TODO: Update metrics to fit new design approach
-    AtomicInteger activeTasks = new AtomicInteger(0);
-    RepoAnalyser repoAnalyser = new RepoAnalyser();
 
-    public String baselineToolProcess(int limit) throws InterruptedException {
+    public RequestStats baselineToolProcess(int limit) throws InterruptedException {
+        AtomicInteger activeTasks = new AtomicInteger(0);
+        RepoAnalyser repoAnalyser = new RepoAnalyser();
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
         CountDownLatch latch = new CountDownLatch(limit);
@@ -26,11 +26,13 @@ public class ToolService {
             tasks.submit(() -> {
                 activeTasks.incrementAndGet();
                 try {
+                    // If we've already reached the limit, stop quickly
+                    if (repoAnalyser.getTodoCount() >= limit)
+                        return null;
+
                     repoAnalyser.analyzeFile(path, limit, latch);
-                }
-                catch (IOException | InterruptedException e) {
-                    log.error("Server error", e);
-                    e.printStackTrace();
+
+                    return null;
                 }
                 finally {
                     activeTasks.decrementAndGet();
@@ -42,13 +44,14 @@ public class ToolService {
 
         log.info("Baseline tool called with limit of = {} TODOs", limit);
 
-        return "TODOs found = " + repoAnalyser.getTODOs() +
-                ". Scanned " + repoAnalyser.getFileCount() + " files";
+        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), activeTasks.get());
     }
 
-    public String structuredToolProcess(int limit) throws InterruptedException {
-
+    public RequestStats structuredToolProcess(int limit) throws InterruptedException {
+        AtomicInteger activeTasks = new AtomicInteger(0);
+        RepoAnalyser repoAnalyser = new RepoAnalyser();
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
+
         CountDownLatch latch = new CountDownLatch(limit);
 
         try (StructuredTaskScope<Void, Void> scope = StructuredTaskScope.open()) {
@@ -80,16 +83,6 @@ public class ToolService {
 
         log.info("Structured tool called with limit of = {} TODOs", limit);
 
-        // Return whatever we managed to collect so far
-        return "TODOs found = " + repoAnalyser.getTODOs() +
-                ". Scanned " + repoAnalyser.getFileCount() + " files";
-    }
-
-    public int getTodoCount() {
-        return repoAnalyser.getTodoCount();
-    }
-
-    public int getActiveTasks() {
-        return activeTasks.get();
+        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), activeTasks.get());
     }
 }
