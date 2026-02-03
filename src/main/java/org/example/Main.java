@@ -128,7 +128,7 @@ public class Main {
                     });
                 }
 
-                log.info("Bench complete: " + n + " iterations");
+                log.info("Created benchmark with " + n + " iterations");
                 Thread.sleep(20000); // give Prometheus time to scrape once
                 return;
             }
