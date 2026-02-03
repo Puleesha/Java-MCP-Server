@@ -1,5 +1,6 @@
 package org.example;
 
+import org.example.Utils.TimeForCancellation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,33 +20,9 @@ public class ToolServiceNew {
 
     // Shared, global executor like a real server
     private final ThreadPoolExecutor tasks =
-            (ThreadPoolExecutor) Executors.newFixedThreadPool(
-                    Runtime.getRuntime().availableProcessors() * 10
-            );
+            (ThreadPoolExecutor) Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 10);
 
     private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
-
-    private static final class StopMetrics {
-        final long cancelNs;     // Tc: time cancellation is signaled
-        final long quiescentNs;  // Tq: time request-owned workers reach 0
-        final long returnNs;     // Tr: time method returns stats
-        final long timeToStopMs;
-        final long overhangMs;
-
-        StopMetrics(long cancelNs, long quiescentNs, long returnNs) {
-            this.cancelNs = cancelNs;
-            this.quiescentNs = quiescentNs;
-            this.returnNs = returnNs;
-
-            this.timeToStopMs = (cancelNs == 0 || quiescentNs == 0 || quiescentNs < cancelNs)
-                    ? -1
-                    : TimeUnit.NANOSECONDS.toMillis(quiescentNs - cancelNs);
-
-            this.overhangMs = (returnNs == 0 || quiescentNs == 0 || quiescentNs < returnNs)
-                    ? -1
-                    : TimeUnit.NANOSECONDS.toMillis(quiescentNs - returnNs);
-        }
-    }
 
     /**
      * Baseline variant:
@@ -65,28 +42,27 @@ public class ToolServiceNew {
         RepoAnalyser repoAnalyser = new RepoAnalyser();
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
-        CountDownLatch quotaLatch = new CountDownLatch(limit);
+        CountDownLatch latch = new CountDownLatch(limit);
 
         long deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
-        int parallelism = Runtime.getRuntime().availableProcessors() * 4;
+        int maxThreadCount = Runtime.getRuntime().availableProcessors() * 4;
 
         ConcurrentLinkedQueue<Path> queue = new ConcurrentLinkedQueue<>(filePaths);
-        List<Future<?>> workers = new ArrayList<>(parallelism);
+        List<Future<?>> workers = new ArrayList<>(maxThreadCount);
 
-        for (int i = 0; i < parallelism; i++) {
+        for (int i = 0; i < maxThreadCount; i++) {
             Future<?> f = tasks.submit(() -> {
                 activeWorkers.incrementAndGet();
                 try {
                     while (true) {
-                        if (repoAnalyser.getTodoCount() >= limit) return;
-                        if (Thread.currentThread().isInterrupted()) return;
-                        if (System.nanoTime() >= deadlineNanos) return;
+                        if (repoAnalyser.getTodoCount() >= limit || Thread.currentThread().isInterrupted() || System.nanoTime() >= deadlineNanos)
+                            return;
 
                         Path path = queue.poll();
                         if (path == null) return;
 
                         try {
-                            repoAnalyser.analyzeFile(path, limit, quotaLatch);
+                            repoAnalyser.analyzeFile(path, limit, latch);
                         } catch (IOException e) {
                             // best-effort skip
                         } catch (InterruptedException ie) {
@@ -104,7 +80,7 @@ public class ToolServiceNew {
             workers.add(f);
         }
 
-        boolean quotaReached = waitUntilQuotaOrDeadline(quotaLatch, deadlineNanos);
+        boolean quotaReached = waitUntilQuotaOrDeadline(latch, deadlineNanos);
 
         // signal cancel on quota/deadline
         if (quotaReached || System.nanoTime() >= deadlineNanos) {
@@ -121,19 +97,18 @@ public class ToolServiceNew {
         }
 
         long returnNs = System.nanoTime();
-        StopMetrics m = new StopMetrics(cancelNs.get(), quiescentNs.get(), returnNs);
+        TimeForCancellation cancelTime = new TimeForCancellation(cancelNs.get(), quiescentNs.get(), returnNs);
 
         log.info(
-                "Baseline: limit={}, todos={}, files={}, activeAtReturn={}, timeToStopMs={}, overhangMs={}",
+                "Baseline: limit={}, todos={}, files={}, activeAtReturn={}, timeToStopMs={}",
                 limit,
                 repoAnalyser.getTodoCount(),
                 repoAnalyser.getFileCount(),
                 activeWorkers.get(),
-                m.timeToStopMs,
-                m.overhangMs
+                cancelTime.getTimeToStopMs()
         );
 
-        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), (int) m.timeToStopMs);
+        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), (int) cancelTime.getTimeToStopMs());
     }
 
     /**
@@ -154,29 +129,28 @@ public class ToolServiceNew {
         RepoAnalyser repoAnalyser = new RepoAnalyser();
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
-        CountDownLatch quotaLatch = new CountDownLatch(limit);
+        CountDownLatch latch = new CountDownLatch(limit);
 
         long deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
-        int parallelism = Runtime.getRuntime().availableProcessors() * 4;
+        int maxThreadCount = Runtime.getRuntime().availableProcessors() * 4;
 
         ConcurrentLinkedQueue<Path> queue = new ConcurrentLinkedQueue<>(filePaths);
 
-        try (RequestScope scope = new RequestScope(tasks, deadlineNanos, parallelism)) {
+        try (RequestScope scope = new RequestScope(tasks, deadlineNanos, maxThreadCount)) {
 
-            for (int i = 0; i < parallelism; i++) {
+            for (int i = 0; i < maxThreadCount; i++) {
                 scope.spawn(() -> {
                     activeWorkers.incrementAndGet();
                     try {
                         while (true) {
-                            if (repoAnalyser.getTodoCount() >= limit) return;
-                            if (scope.isCancelled() || Thread.currentThread().isInterrupted()) return;
-                            if (System.nanoTime() >= deadlineNanos) return;
+                            if (repoAnalyser.getTodoCount() >= limit || Thread.currentThread().isInterrupted() || System.nanoTime() >= deadlineNanos)
+                                return;
 
                             Path path = queue.poll();
                             if (path == null) return;
 
                             try {
-                                repoAnalyser.analyzeFile(path, limit, quotaLatch);
+                                repoAnalyser.analyzeFile(path, limit, latch);
                             } catch (IOException e) {
                                 // best-effort skip
                             }
@@ -190,7 +164,7 @@ public class ToolServiceNew {
                 });
             }
 
-            boolean quotaReached = waitUntilQuotaOrDeadline(quotaLatch, deadlineNanos);
+            boolean quotaReached = waitUntilQuotaOrDeadline(latch, deadlineNanos);
 
             if (quotaReached || System.nanoTime() >= deadlineNanos) {
                 cancelNs.compareAndSet(0, System.nanoTime());
@@ -208,19 +182,18 @@ public class ToolServiceNew {
         }
 
         long returnNs = System.nanoTime();
-        StopMetrics m = new StopMetrics(cancelNs.get(), quiescentNs.get(), returnNs);
+        TimeForCancellation cancelTime = new TimeForCancellation(cancelNs.get(), quiescentNs.get(), returnNs);
 
         log.info(
-                "Structured: limit={}, todos={}, files={}, activeAtReturn={}, timeToStopMs={}, overhangMs={}",
+                "Structured: limit={}, todos={}, files={}, activeAtReturn={}, timeToStopMs={}",
                 limit,
                 repoAnalyser.getTodoCount(),
                 repoAnalyser.getFileCount(),
                 activeWorkers.get(),
-                m.timeToStopMs,
-                m.overhangMs
+                cancelTime.getTimeToStopMs()
         );
 
-        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), (int) m.timeToStopMs);
+        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), (int) cancelTime.getTimeToStopMs());
     }
 
     /**
