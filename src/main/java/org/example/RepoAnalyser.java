@@ -84,10 +84,10 @@ public class RepoAnalyser {
             String line;
             fileCount.incrementAndGet();
 
-            // Simulate network latency
-            Thread.sleep(new Random().nextInt(800));
+            if (Thread.currentThread().isInterrupted())
+                return;
 
-            while (((line = reader.readLine()) != null) && todoCount.get() < limit)
+            while (((line = reader.readLine()) != null) && todoCount.get() < limit && !Thread.currentThread().isInterrupted())
                 if (line.contains("TODO"))
                     addTODO(line, latch);
         }

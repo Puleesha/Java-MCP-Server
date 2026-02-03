@@ -3,7 +3,6 @@ package org.example;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.*;
@@ -12,8 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ToolService {
     private static final Logger log = LoggerFactory.getLogger(ToolService.class);
     private final ExecutorService tasks = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
-
-    // TODO: Update metrics to fit new design approach
 
     public RequestStats baselineToolProcess(int limit) throws InterruptedException {
         AtomicInteger activeTasks = new AtomicInteger(0);

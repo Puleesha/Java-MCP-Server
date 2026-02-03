@@ -12,95 +12,144 @@ import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class ToolServiceNew {
-    private static final Logger log = LoggerFactory.getLogger(ToolService.class);
+    private static final Logger log = LoggerFactory.getLogger(ToolServiceNew.class);
 
     // Shared, global executor like a real server
     private final ThreadPoolExecutor tasks =
-            (ThreadPoolExecutor) Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 10);
+            (ThreadPoolExecutor) Executors.newFixedThreadPool(
+                    Runtime.getRuntime().availableProcessors() * 10
+            );
 
-    // Tune these and report them in your thesis
     private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
+
+    private static final class StopMetrics {
+        final long cancelNs;     // Tc: time cancellation is signaled
+        final long quiescentNs;  // Tq: time request-owned workers reach 0
+        final long returnNs;     // Tr: time method returns stats
+        final long timeToStopMs;
+        final long overhangMs;
+
+        StopMetrics(long cancelNs, long quiescentNs, long returnNs) {
+            this.cancelNs = cancelNs;
+            this.quiescentNs = quiescentNs;
+            this.returnNs = returnNs;
+
+            this.timeToStopMs = (cancelNs == 0 || quiescentNs == 0 || quiescentNs < cancelNs)
+                    ? -1
+                    : TimeUnit.NANOSECONDS.toMillis(quiescentNs - cancelNs);
+
+            this.overhangMs = (returnNs == 0 || quiescentNs == 0 || quiescentNs < returnNs)
+                    ? -1
+                    : TimeUnit.NANOSECONDS.toMillis(quiescentNs - returnNs);
+        }
+    }
 
     /**
      * Baseline variant:
-     * - Submits work directly to the shared executor (unstructured).
+     * - Submits N workers directly to shared executor (no scope).
      * - Waits until quota reached OR deadline reached.
-     * - Best-effort cancellation by Future.cancel(true).
-     * - Does NOT guarantee clean join/cleanup (intentionally).
+     * - Best-effort cancellation via Future.cancel(true).
+     * - No guarantee of cleanup/join before return (intentionally).
+     *
+     * Metric:
+     * - timeToStopMs: time from cancellation signal -> workers quiescent (activeWorkers==0)
      */
-    public RequestStats baselineToolProcess(int limit) throws InterruptedException {
-        AtomicInteger activeTasks = new AtomicInteger(0);
+    public RequestStats baselineToolProcess(int limit) {
+        AtomicInteger activeWorkers = new AtomicInteger(0);
+        AtomicLong cancelNs = new AtomicLong(0);
+        AtomicLong quiescentNs = new AtomicLong(0);
 
         RepoAnalyser repoAnalyser = new RepoAnalyser();
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
         CountDownLatch quotaLatch = new CountDownLatch(limit);
-        Semaphore permits = new Semaphore(Runtime.getRuntime().availableProcessors() * 4);
-
-        List<Future<?>> futures = new ArrayList<>(filePaths.size());
 
         long deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
+        int parallelism = Runtime.getRuntime().availableProcessors() * 4;
 
-        for (Path path : filePaths) {
+        ConcurrentLinkedQueue<Path> queue = new ConcurrentLinkedQueue<>(filePaths);
+        List<Future<?>> workers = new ArrayList<>(parallelism);
+
+        for (int i = 0; i < parallelism; i++) {
             Future<?> f = tasks.submit(() -> {
-                // Acquire per-request permit (interruptible so cancel(true) works)
+                activeWorkers.incrementAndGet();
                 try {
-                    permits.acquire();
-                }
-                catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+                    while (true) {
+                        if (repoAnalyser.getTodoCount() >= limit) return;
+                        if (Thread.currentThread().isInterrupted()) return;
+                        if (System.nanoTime() >= deadlineNanos) return;
 
-                activeTasks.incrementAndGet();
-                try {
-                    if (repoAnalyser.getTodoCount() >= limit)
-                        return;
+                        Path path = queue.poll();
+                        if (path == null) return;
 
-                    // Cancel check for interruption
-                    if (Thread.currentThread().isInterrupted())
-                        return;
-
-                    repoAnalyser.analyzeFile(path, limit, quotaLatch);
-                }
-                catch (IOException | InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-                finally {
-                    activeTasks.decrementAndGet();
-                    permits.release();
+                        try {
+                            repoAnalyser.analyzeFile(path, limit, quotaLatch);
+                        } catch (IOException e) {
+                            // best-effort skip
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                    }
+                } finally {
+                    int now = activeWorkers.decrementAndGet();
+                    if (now == 0 && cancelNs.get() != 0 && quiescentNs.get() == 0) {
+                        quiescentNs.compareAndSet(0, System.nanoTime());
+                    }
                 }
             });
-            futures.add(f);
+            workers.add(f);
         }
 
-        // Wait until limit reached or deadline
-        waitUntilQuotaOrDeadline(quotaLatch, deadlineNanos);
+        boolean quotaReached = waitUntilQuotaOrDeadline(quotaLatch, deadlineNanos);
 
-        // Best-effort cancel: interrupt running tasks + prevent queued tasks from starting
-        for (Future<?> f : futures) {
-            f.cancel(true);
+        // signal cancel on quota/deadline
+        if (quotaReached || System.nanoTime() >= deadlineNanos) {
+            cancelNs.compareAndSet(0, System.nanoTime());
+
+            for (Future<?> f : workers) {
+                f.cancel(true);
+            }
+
+            // if already quiescent, record immediately
+            if (activeWorkers.get() == 0) {
+                quiescentNs.compareAndSet(0, System.nanoTime());
+            }
         }
 
-        log.info("Baseline tool called with limit={} TODOs", limit);
+        long returnNs = System.nanoTime();
+        StopMetrics m = new StopMetrics(cancelNs.get(), quiescentNs.get(), returnNs);
 
-        return new RequestStats(
+        log.info(
+                "Baseline: limit={}, todos={}, files={}, activeAtReturn={}, timeToStopMs={}, overhangMs={}",
+                limit,
                 repoAnalyser.getTodoCount(),
                 repoAnalyser.getFileCount(),
-                (int) (tasks.getTaskCount() - tasks.getCompletedTaskCount())
+                activeWorkers.get(),
+                m.timeToStopMs,
+                m.overhangMs
         );
+
+        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), (int) m.timeToStopMs);
     }
 
     /**
      * Structured variant:
-     * - Creates a per-request scope on top of the SAME shared executor.
-     * - All task spawning goes through the scope.
-     * - On quota or deadline: scope.shutdown() cancels remaining tasks.
-     * - scope.joinUntil(deadline) enforces bounded waiting and prevents blocking forever.
+     * - Uses RequestScope over the SAME shared executor.
+     * - Spawns N workers THROUGH the scope.
+     * - On quota/deadline: scope.shutdown() cancels children.
+     * - scope.joinUntil(deadline) prevents waiting forever.
+     *
+     * Metric:
+     * - timeToStopMs: time from scope shutdown -> workers quiescent (activeWorkers==0)
      */
-    public RequestStats structuredToolProcess(int limit) throws InterruptedException {
-        AtomicInteger activeTasks = new AtomicInteger(0);
+    public RequestStats structuredToolProcess(int limit) {
+        AtomicInteger activeWorkers = new AtomicInteger(0);
+        AtomicLong cancelNs = new AtomicLong(0);
+        AtomicLong quiescentNs = new AtomicLong(0);
 
         RepoAnalyser repoAnalyser = new RepoAnalyser();
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
@@ -108,63 +157,81 @@ public class ToolServiceNew {
         CountDownLatch quotaLatch = new CountDownLatch(limit);
 
         long deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
+        int parallelism = Runtime.getRuntime().availableProcessors() * 4;
 
         ConcurrentLinkedQueue<Path> queue = new ConcurrentLinkedQueue<>(filePaths);
 
-        try (RequestScope scope = new RequestScope(tasks, deadlineNanos, Runtime.getRuntime().availableProcessors() * 4)) {
+        try (RequestScope scope = new RequestScope(tasks, deadlineNanos, parallelism)) {
 
-            for (Path path : filePaths) {
+            for (int i = 0; i < parallelism; i++) {
                 scope.spawn(() -> {
-                    activeTasks.incrementAndGet();
+                    activeWorkers.incrementAndGet();
                     try {
-                        if (repoAnalyser.getTodoCount() >= limit) return;
-                        if (scope.isCancelled() || Thread.currentThread().isInterrupted()) return;
+                        while (true) {
+                            if (repoAnalyser.getTodoCount() >= limit) return;
+                            if (scope.isCancelled() || Thread.currentThread().isInterrupted()) return;
+                            if (System.nanoTime() >= deadlineNanos) return;
 
-                        repoAnalyser.analyzeFile(path, limit, quotaLatch);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+                            Path path = queue.poll();
+                            if (path == null) return;
+
+                            try {
+                                repoAnalyser.analyzeFile(path, limit, quotaLatch);
+                            } catch (IOException e) {
+                                // best-effort skip
+                            }
+                        }
                     } finally {
-                        activeTasks.decrementAndGet();
+                        int now = activeWorkers.decrementAndGet();
+                        if (now == 0 && cancelNs.get() != 0 && quiescentNs.get() == 0) {
+                            quiescentNs.compareAndSet(0, System.nanoTime());
+                        }
                     }
                 });
             }
 
-            // Wait until quota or deadline
             boolean quotaReached = waitUntilQuotaOrDeadline(quotaLatch, deadlineNanos);
 
-            // Enforce structured semantics:
-            // if quota reached or deadline hit -> stop all remaining child tasks for this request
             if (quotaReached || System.nanoTime() >= deadlineNanos) {
+                cancelNs.compareAndSet(0, System.nanoTime());
                 scope.shutdown();
+
+                if (activeWorkers.get() == 0) {
+                    quiescentNs.compareAndSet(0, System.nanoTime());
+                }
             }
 
-            // Join, but DO NOT block past deadline (and don't pretend you can)
             scope.joinUntil(deadlineNanos);
 
         } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt(); // preserve interrupt
+            Thread.currentThread().interrupt();
         }
 
-        log.info("Structured tool called with limit={} TODOs", limit);
+        long returnNs = System.nanoTime();
+        StopMetrics m = new StopMetrics(cancelNs.get(), quiescentNs.get(), returnNs);
 
-        return new RequestStats(
+        log.info(
+                "Structured: limit={}, todos={}, files={}, activeAtReturn={}, timeToStopMs={}, overhangMs={}",
+                limit,
                 repoAnalyser.getTodoCount(),
                 repoAnalyser.getFileCount(),
-                (int) (tasks.getTaskCount() - tasks.getCompletedTaskCount())
+                activeWorkers.get(),
+                m.timeToStopMs,
+                m.overhangMs
         );
+
+        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), (int) m.timeToStopMs);
     }
 
     /**
      * Returns true if quota reached before deadline, false otherwise.
      */
     private boolean waitUntilQuotaOrDeadline(CountDownLatch latch, long deadlineNanos) {
-        long remaining;
         while (true) {
-            remaining = deadlineNanos - System.nanoTime();
+            long remaining = deadlineNanos - System.nanoTime();
             if (remaining <= 0) return false;
 
             try {
-                // Wait in small chunks so we can respect deadline precisely
                 long chunk = Math.min(TimeUnit.MILLISECONDS.toNanos(50), remaining);
                 if (latch.await(chunk, TimeUnit.NANOSECONDS)) return true;
             } catch (InterruptedException ie) {
@@ -175,8 +242,7 @@ public class ToolServiceNew {
     }
 
     /**
-     * A per-request structured scope implemented ON TOP of an ExecutorService.
-     * This is the key to your thesis: "scope owns children, cancellation, and join semantics".
+     * Request-scoped structured execution built on top of a shared executor.
      */
     static final class RequestScope implements AutoCloseable {
         private final ExecutorService executor;
@@ -198,12 +264,11 @@ public class ToolServiceNew {
         void spawn(InterruptibleRunnable r) throws InterruptedException {
             if (cancelled.get()) return;
 
-            // Bound per-request parallelism *before* scheduling
+            // Backpressure: bound per-request parallelism before scheduling
             permits.acquire();
 
             Future<?> f = executor.submit(() -> {
                 try {
-                    // Deadline/cancel gate
                     if (cancelled.get()) return;
                     if (System.nanoTime() >= deadlineNanos) return;
                     if (Thread.currentThread().isInterrupted()) return;
@@ -221,14 +286,12 @@ public class ToolServiceNew {
 
         void shutdown() {
             if (!cancelled.compareAndSet(false, true)) return;
-
             for (Future<?> f : children) {
                 f.cancel(true);
             }
         }
 
         void joinUntil(long joinDeadlineNanos) throws InterruptedException {
-            // Best effort: wait for children until deadline; then cancel and stop waiting
             for (Future<?> f : children) {
                 long remaining = joinDeadlineNanos - System.nanoTime();
                 if (remaining <= 0) {
@@ -241,18 +304,15 @@ public class ToolServiceNew {
                     shutdown();
                     return;
                 } catch (CancellationException ignored) {
-                    // cancelled -> ok
-                } catch (ExecutionException ee) {
-                    // You choose semantics: fail-fast vs best-effort.
-                    // For your "partial results" thesis, best-effort is usually right:
-                    // just keep going.
+                    // ok
+                } catch (ExecutionException ignored) {
+                    // best-effort: keep joining others
                 }
             }
         }
 
         @Override
         public void close() {
-            // Enforce "no child work past scope end"
             shutdown();
             try {
                 joinUntil(deadlineNanos);

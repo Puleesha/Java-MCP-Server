@@ -101,7 +101,7 @@ public class Main {
                 int n = Integer.parseInt(args[1]);      // number of iterations
                 int limit = Integer.parseInt(args[3]);  // expects --limit X
                 String mode = args[5];
-                ToolService requestScope = new ToolService();
+                ToolServiceNew requestScope = new ToolServiceNew();
 
                 for (int i = 0; i < n; i++) {
                     requests.execute(() -> {
@@ -118,9 +118,6 @@ public class Main {
                             todosMissedPerRequest.record(limit - result.todoCount());
                             log.info("Active tasks: " + result.activeTasks());
                             leakedThreads.record(result.activeTasks());
-                        }
-                        catch (InterruptedException e) {
-                            reqErrors.increment();
                         }
                         finally {
                             sample.stop(reqLatency);
@@ -173,7 +170,7 @@ public class Main {
                         Map<String, Object> arguments = toolReq.arguments();
                         int limit = ((Number) arguments.get("limit")).intValue();
 
-                        ToolService requestScope = new ToolService();
+                        ToolServiceNew requestScope = new ToolServiceNew();
                         RequestStats requestStats = requestScope.baselineToolProcess(limit);
                         todosMissedPerRequest.record(limit - requestStats.todoCount());
 
@@ -215,7 +212,7 @@ public class Main {
                             Map<String, Object> arguments = toolReq.arguments();
                             int limit = ((Number) arguments.get("limit")).intValue();
 
-                            ToolService requestScope = new ToolService();
+                            ToolServiceNew requestScope = new ToolServiceNew();
                             RequestStats requestStats = requestScope.structuredToolProcess(limit);
                             todosMissedPerRequest.record(limit - requestStats.todoCount());
 
