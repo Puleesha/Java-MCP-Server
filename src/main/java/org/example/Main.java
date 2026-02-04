@@ -101,7 +101,7 @@ public class Main {
                 int n = Integer.parseInt(args[1]);      // number of iterations
                 int limit = Integer.parseInt(args[3]);  // expects --limit X
                 String mode = args[5];
-                ToolServiceNew requestScope = new ToolServiceNew();
+                ToolService requestScope = new ToolService();
 
                 for (int i = 0; i < n; i++) {
                     requests.execute(() -> {
@@ -171,7 +171,7 @@ public class Main {
                         Map<String, Object> arguments = toolReq.arguments();
                         int limit = ((Number) arguments.get("limit")).intValue();
 
-                        ToolServiceNew requestScope = new ToolServiceNew();
+                        ToolService requestScope = new ToolService();
                         RequestStats requestStats = requestScope.baselineToolProcess(limit);
                         todosMissedPerRequest.record(limit - requestStats.todoCount());
 
@@ -213,7 +213,7 @@ public class Main {
                             Map<String, Object> arguments = toolReq.arguments();
                             int limit = ((Number) arguments.get("limit")).intValue();
 
-                            ToolServiceNew requestScope = new ToolServiceNew();
+                            ToolService requestScope = new ToolService();
                             RequestStats requestStats = requestScope.structuredToolProcess(limit);
                             todosMissedPerRequest.record(limit - requestStats.todoCount());
 
