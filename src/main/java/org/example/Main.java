@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
@@ -127,7 +128,11 @@ public class Main {
                 }
 
                 log.info("Created benchmark with " + n + " iterations");
-                Thread.sleep(20000); // give Prometheus time to scrape once
+
+                requests.shutdown();
+                requests.awaitTermination(10, TimeUnit.MINUTES);
+
+                Thread.sleep(30000);
                 return;
             }
 
