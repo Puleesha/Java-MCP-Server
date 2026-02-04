@@ -118,8 +118,9 @@ public class Main {
                             todosMissedPerRequest.record(limit - result.todoCount());
                             log.info("Active tasks: " + result.activeTasks());
                             leakedThreads.record(result.activeTasks());
-                        }
-                        finally {
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        } finally {
                             sample.stop(reqLatency);
                         }
                     });
