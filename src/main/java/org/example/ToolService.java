@@ -13,6 +13,11 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * This class contains both the baseline and structured thread handling approaches
+ *
+ * @author Puleesha Vilhan
+ */
 public class ToolService {
     private static final Logger log = LoggerFactory.getLogger(ToolService.class);
 
