@@ -41,6 +41,7 @@ public class Main {
             // -------------------------
             // Create the registry
             PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+            String maxTODOs = args.length > 3 ? args[3] : "0";
 
             // -------------------------
             // Request-level counters
@@ -56,7 +57,7 @@ public class Main {
             // Request latency
             Timer reqLatency = Timer.builder("request_duration_seconds")
                     .description("End-to-end MCP tool call duration")
-                    .tag("limit", args[3])
+                    .tag("limit", maxTODOs)
                     .publishPercentileHistogram()
                     .register(registry);
 
@@ -64,13 +65,13 @@ public class Main {
             // Work completion semantics (per request)
             DistributionSummary todosCompletedPerRequest = DistributionSummary.builder("todos_completed_per_request")
                     .description("Number of TODOs completed before return or timeout")
-                    .tag("limit", args[3])
+                    .tag("limit", maxTODOs)
                     .publishPercentileHistogram()
                     .register(registry);
 
             DistributionSummary todosMissedPerRequest = DistributionSummary.builder("todos_missed_per_request")
                     .description("Number of TODOs missed due to timeout or cancellation")
-                    .tag("limit", args[3])
+                    .tag("limit", maxTODOs)
                     .publishPercentileHistogram()
                     .register(registry);
 
@@ -78,13 +79,15 @@ public class Main {
             // Execution control / leakage
             DistributionSummary leakedThreads = DistributionSummary.builder("leaked_threads")
                     .description("Number of threads still running after request completes")
-                    .tag("limit", args[3])
+                    .tag("limit", maxTODOs)
                     .publishPercentileHistogram()
                     .register(registry);
 
-            int port = (args.length > 0 && "baseline".equals(args[5])) ? 9100 : 9101;
+            String variant  = (args.length > 5) ? args[5] : "";
+
+            int port = "baseline".equals(variant) ? 9100 : 9101;
             log.info("Listening on port {}", port);
-            registry.config().commonTags("variant", args[5]);
+            registry.config().commonTags("variant", args.length > 5 ? args[5] : "");
             metricsServer = startMetricsHttpServer(registry, port);
 
             HttpServer finalMetricsServer = metricsServer;
@@ -98,7 +101,7 @@ public class Main {
             // -------------------------
             // This section runs for benchmarking purposes
             // -------------------------
-            if (args.length > 0 && args[0].equals("--bench")) {
+            if (args.length > 5 && args[0].equals("--bench")) {
                 int n = Integer.parseInt(args[1]);      // number of iterations
                 int limit = Integer.parseInt(args[3]);  // expects --limit X
                 String mode = args[5];
