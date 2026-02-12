@@ -41,7 +41,7 @@ public class Main {
             // -------------------------
             // Create the registry
             PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-            String maxTODOs = args.length > 3 ? args[3] : "0";
+            String maxTODOs = args.length >= 3 ? args[3] : "0";
 
             // -------------------------
             // Request-level counters
@@ -83,11 +83,11 @@ public class Main {
                     .publishPercentileHistogram()
                     .register(registry);
 
-            String variant  = (args.length > 5) ? args[5] : "";
+            String variant  = (args.length >= 5) ? args[5] : "";
 
             int port = "baseline".equals(variant) ? 9100 : 9101;
             log.info("Listening on port {}", port);
-            registry.config().commonTags("variant", args.length > 5 ? args[5] : "");
+            registry.config().commonTags("variant", args.length >= 5 ? args[5] : "");
             metricsServer = startMetricsHttpServer(registry, port);
 
             HttpServer finalMetricsServer = metricsServer;
@@ -101,7 +101,7 @@ public class Main {
             // -------------------------
             // This section runs for benchmarking purposes
             // -------------------------
-            if (args.length > 5 && args[0].equals("--bench")) {
+            if (args.length >= 5 && args[0].equals("--bench")) {
                 int n = Integer.parseInt(args[1]);      // number of iterations
                 int limit = Integer.parseInt(args[3]);  // expects --limit X
                 String mode = args[5];
