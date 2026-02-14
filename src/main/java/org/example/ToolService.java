@@ -1,16 +1,16 @@
 package org.example;
 
+import org.example.CustomScope.TaskJoiner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -104,19 +104,18 @@ public class ToolService {
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
         AtomicInteger activeTasks = new AtomicInteger(filePaths.size());
 
-        CountDownLatch quotaLatch = new CountDownLatch(limit);
-        int unfinishedTasks = -1;
+        Instant deadline = Instant.now().plus(REQUEST_DEADLINE);
+        TaskJoiner<Void> joiner = new TaskJoiner<>(limit, deadline);
 
-        long deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
-
-        try (RequestScope scope = new RequestScope(tasks, deadlineNanos, Runtime.getRuntime().availableProcessors() * 4)) {
-
+        try (var scope = StructuredTaskScope.open(joiner)) {
             for (Path path : filePaths) {
-                scope.spawn(() -> {
+                scope.fork(() -> {
                     try {
-                        if (scope.isCancelled() || Thread.currentThread().isInterrupted()) return;
+                        // Joiner controls cancellation, so just respect interrupt
+                        if (Thread.currentThread().isInterrupted())
+                            return null;
 
-                        repoAnalyser.analyzeFile(path, limit, quotaLatch);
+                        repoAnalyser.analyzeFile(path, limit, null);
                     }
                     catch (IOException e) {
                         Thread.currentThread().interrupt();
@@ -124,27 +123,34 @@ public class ToolService {
                     finally {
                         activeTasks.decrementAndGet();
                     }
+
+                    return null;
                 });
             }
 
-            // Wait until quota or deadline
-            boolean quotaReached = waitUntilQuotaOrDeadline(quotaLatch, deadlineNanos);
-            unfinishedTasks = activeTasks.get();
-
-            // Enforce structured semantics:
-            // if quota reached or deadline hit -> stop all remaining child tasks for this request
-            if (quotaReached || System.nanoTime() >= deadlineNanos)
-                unfinishedTasks = scope.shutdown();
+            // This blocks until joiner decides:
+            // - quota reached OR
+            // - deadline reached OR
+            // - all tasks finished
+            scope.join();
 
         } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt(); // preserve interrupt
+
+            Thread.currentThread().interrupt();
+            throw ie;
         }
 
+        int unfinishedTasks = activeTasks.get();
 
         log.info("Structured tool called with limit={} TODOs", limit);
 
-        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), unfinishedTasks);
+        return new RequestStats(
+                repoAnalyser.getTodoCount(),
+                repoAnalyser.getFileCount(),
+                unfinishedTasks
+        );
     }
+
 
     /**
      * Returns true if quota reached before deadline, false otherwise.
@@ -164,103 +170,5 @@ public class ToolService {
                 return false;
             }
         }
-    }
-
-    /**
-     * A per-request structured scope implemented ON TOP of an ExecutorService.
-     * This is the key to your thesis: "scope owns children, cancellation, and join semantics".
-     */
-    static class RequestScope implements AutoCloseable {
-        private final ExecutorService executor;
-        private final long deadlineNanos;
-        private final Semaphore permits;
-        private final AtomicBoolean cancelled = new AtomicBoolean(false);
-        private final List<Future<?>> children = new CopyOnWriteArrayList<>();
-
-        RequestScope(ExecutorService executor, long deadlineNanos, int maxParallel) {
-            this.executor = Objects.requireNonNull(executor);
-            this.deadlineNanos = deadlineNanos;
-            this.permits = new Semaphore(Math.max(1, maxParallel));
-        }
-
-        boolean isCancelled() {
-            return cancelled.get();
-        }
-
-        void spawn(InterruptibleRunnable r) throws InterruptedException {
-            if (cancelled.get()) return;
-
-            // Bound per-request parallelism *before* scheduling
-            permits.acquire();
-
-            Future<?> f = executor.submit(() -> {
-                try {
-                    // Deadline/cancel gate
-                    if (cancelled.get()) return;
-                    if (System.nanoTime() >= deadlineNanos) return;
-                    if (Thread.currentThread().isInterrupted()) return;
-
-                    r.run();
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                } finally {
-                    permits.release();
-                }
-            });
-
-            children.add(f);
-        }
-
-        int shutdown() {
-            if (!cancelled.compareAndSet(false, true))
-                return -1;
-
-            int leakedTasks = (int) children.stream().filter(f -> !f.isDone()).count();
-
-            for (Future<?> f : children) {
-                f.cancel(true);
-            }
-
-            return leakedTasks;
-        }
-
-        void joinUntil(long joinDeadlineNanos) throws InterruptedException {
-            // Best effort: wait for children until deadline; then cancel and stop waiting
-            for (Future<?> f : children) {
-                long remaining = joinDeadlineNanos - System.nanoTime();
-                if (remaining <= 0) {
-                    shutdown();
-                    return;
-                }
-                try {
-                    f.get(remaining, TimeUnit.NANOSECONDS);
-                } catch (TimeoutException te) {
-                    shutdown();
-                    return;
-                } catch (CancellationException ignored) {
-                    // cancelled -> ok
-                } catch (ExecutionException ee) {
-                    // You choose semantics: fail-fast vs best-effort.
-                    // For your "partial results" thesis, best-effort is usually right:
-                    // just keep going.
-                }
-            }
-        }
-
-        @Override
-        public void close() {
-            // Enforce "no child work past scope end"
-            shutdown();
-            try {
-                joinUntil(deadlineNanos);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    @FunctionalInterface
-    interface InterruptibleRunnable {
-        void run() throws InterruptedException;
     }
 }
