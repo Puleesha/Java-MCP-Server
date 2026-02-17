@@ -1,8 +1,8 @@
-This project represents one of the four MCP server variants made for the Final Year Research of my Software Engineering degree.
+<h2>Java MCP Server</h2>
 
-More specifically, this is the: <h2>Baseline Java MCP Server</h2>
+This project represents the Java MCP server variants made for the Final Year Research of my Software Engineering degree.
 
-This server uses a <strong> sequential approach </strong> for file reading and cancellation / error handling.
+This server variants use either a <strong> sequential approach </strong> or a <strong>strcutured task scope with a custom joiner</strong> for handling multiple threads per request.
 
 It includes a mock repository for the file analysis, which include three folders:
 
