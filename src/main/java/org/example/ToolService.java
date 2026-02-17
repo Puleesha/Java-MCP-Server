@@ -100,6 +100,8 @@ public class ToolService {
      */
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
+        // TODO: Structured tool not returning any TODO tasks
+
         RepoAnalyser repoAnalyser = new RepoAnalyser();
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
         AtomicInteger activeTasks = new AtomicInteger(filePaths.size());
