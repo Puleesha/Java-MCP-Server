@@ -16,9 +16,16 @@ public class TaskJoiner<T> implements StructuredTaskScope.Joiner<T, T> {
         this.deadline = deadline;
     }
 
+    /**
+     * This method prevents creation of new tasks after deadlines of either limit or time are passed.
+     *
+     * @param   subtask The task to be executed
+     *
+     * @return  A boolean indicating whether to cancel the scope
+     */
     @Override
     public boolean onFork(Subtask<? extends T> subtask) {
-        return count.get() < limit && Instant.now().isBefore(deadline);
+        return count.get() >= limit || Instant.now().isAfter(deadline);
     }
 
     @Override
