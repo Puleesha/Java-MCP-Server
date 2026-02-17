@@ -22,7 +22,7 @@ public class ToolService {
     private static final Logger log = LoggerFactory.getLogger(ToolService.class);
 
     // Shared, global executor like a real server
-    private final ExecutorService tasks = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 5);
+    private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
 
     // Tune these and report them in your thesis
     private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
@@ -40,7 +40,6 @@ public class ToolService {
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
 
         CountDownLatch quotaLatch = new CountDownLatch(limit);
-        Semaphore permits = new Semaphore(Runtime.getRuntime().availableProcessors() * 4);
 
         List<Future<?>> futures = new ArrayList<>(filePaths.size());
         AtomicInteger activeTasks = new AtomicInteger(filePaths.size());
@@ -49,17 +48,7 @@ public class ToolService {
 
         for (Path path : filePaths) {
             Future<?> f = tasks.submit(() -> {
-                // Acquire per-request permit (interruptible so cancel(true) works)
                 try {
-                    permits.acquire();
-                }
-                catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-
-                try {
-
                     // Cancel check for interruption
                     if (Thread.currentThread().isInterrupted())
                         return;
@@ -71,7 +60,6 @@ public class ToolService {
                 }
                 finally {
                     activeTasks.decrementAndGet();
-                    permits.release();
                 }
             });
             futures.add(f);

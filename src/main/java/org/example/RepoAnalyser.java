@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -18,6 +19,7 @@ public class RepoAnalyser {
 
     private final AtomicInteger todoCount = new AtomicInteger(0);
     private final AtomicInteger fileCount = new AtomicInteger(0);
+    private final Semaphore connections = new Semaphore(100);
     private ArrayList<String> TODOs = new ArrayList<>();
 
     /**
@@ -34,10 +36,14 @@ public class RepoAnalyser {
 
         List<Path> filesToAnalyze = new LinkedList<>();
         try {
+            connections.acquire();
             filesToAnalyze = discoverFiles(rootDir, fileType);
         }
-        catch (IOException e) {
+        catch (IOException | InterruptedException e) {
             e.printStackTrace();
+        }
+        finally {
+            connections.release();
         }
 
         return filesToAnalyze;
@@ -60,11 +66,10 @@ public class RepoAnalyser {
 
     private boolean hasAllowedExtension(Path path, List<String> extensions) {
         String name = path.getFileName().toString().toLowerCase();
-        for (String ext : extensions) {
-            if (name.endsWith(ext.toLowerCase())) {
+        for (String ext : extensions)
+            if (name.endsWith(ext.toLowerCase()))
                 return true;
-            }
-        }
+
         return false;
     }
 
@@ -79,17 +84,23 @@ public class RepoAnalyser {
      * @throws  InterruptedException If the Thread.sleep() is interrupted
      */
     public void analyzeFile(Path file, int limit, CountDownLatch latch) throws IOException, InterruptedException {
+        try {
+            connections.acquire();
 
-        try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            String line;
-            fileCount.incrementAndGet();
+            try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                String line;
+                fileCount.incrementAndGet();
 
-            if (Thread.currentThread().isInterrupted())
-                return;
+                if (Thread.currentThread().isInterrupted())
+                    return;
 
-            while (((line = reader.readLine()) != null) && todoCount.get() < limit && !Thread.currentThread().isInterrupted())
-                if (line.contains("TODO"))
-                    addTODO(line, latch);
+                while (((line = reader.readLine()) != null) && todoCount.get() < limit && !Thread.currentThread().isInterrupted())
+                    if (line.contains("TODO"))
+                        addTODO(line, latch);
+            }
+        }
+        finally {
+            connections.release();
         }
     }
 
