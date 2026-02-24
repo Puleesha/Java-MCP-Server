@@ -33,7 +33,6 @@ public class Main {
         HttpServer metricsServer = null;
         ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
 
-        // TODO: Structured prometheus server not working
         try {
             // -------------------------
             // Prometheus pull metrics
