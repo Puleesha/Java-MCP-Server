@@ -6,7 +6,16 @@ scrape_configs:
     static_configs:
       - targets: ["host.docker.internal:9100"]
         labels:
-          variant: "baseline"
+          variant: "java_baseline"
       - targets: ["host.docker.internal:9101"]
         labels:
-          variant: "structured"
+          variant: "java_structured"
+
+  - job_name: "mcp_rust_benchmark"
+    static_configs:
+      - targets: [ "host.docker.internal:9102" ]
+        labels:
+          variant: "rust_baseline"
+      - targets: [ "host.docker.internal:9103" ]
+        labels:
+          variant: "rust_structured"

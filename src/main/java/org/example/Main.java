@@ -79,7 +79,7 @@ public class Main {
                     .publishPercentileHistogram()
                     .register(registry);
 
-            String variant  = (args.length >= 5) ? args[5] : "";
+            String variant = (args.length >= 5) ? args[5] : "";
 
             int port = "baseline".equals(variant) ? 9100 : 9101;
             log.info("Listening on port {}", port);
