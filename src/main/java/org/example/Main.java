@@ -1,6 +1,7 @@
 package org.example;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
@@ -15,34 +16,27 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.prometheus.metrics.exporter.pushgateway.PushGateway;
-
-import java.lang.management.ManagementFactory;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
-    // Push interval in seconds — match your Prometheus scrape_interval
-    private static final int PUSH_INTERVAL_SECONDS = 15;
-
     public static void main(String[] args) {
-        ScheduledExecutorService pusher = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "metrics-push");
-            t.setDaemon(true);
-            return t;
-        });
+        HttpServer metricsServer = null;
         ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
-        // TODO: Add metric for tasks created (if limit is small it might change time to time)
 
+        // TODO: Structured prometheus server not working
         try {
             // -------------------------
-            // Prometheus push metrics
+            // Prometheus pull metrics
             // -------------------------
 
             // -------------------------
@@ -86,40 +80,19 @@ public class Main {
                     .publishPercentileHistogram()
                     .register(registry);
 
-            String variant = (args.length >= 5) ? args[5] : "";
-            registry.config().commonTags("variant", variant);
+            String variant  = (args.length >= 5) ? args[5] : "";
 
-            // -------------------------
-            // Push gateway setup
-            // -------------------------
-            // Job name encodes the variant so baseline/structured metrics are
-            // stored under separate grouping keys in the Pushgateway — replacing
-            // the role that separate ports (9100/9101) played in the pull model.
-            String pushgatewayUrl = System.getenv().getOrDefault("PUSHGATEWAY_URL", "localhost:9091");
-            String jobName = "mcp_server_" + (variant.isEmpty() ? "default" : variant);
-            String instanceId = ManagementFactory.getRuntimeMXBean().getName(); // "pid@host"
+            int port = "baseline".equals(variant) ? 9100 : 9101;
+            log.info("Listening on port {}", port);
+            registry.config().commonTags("variant", args.length >= 5 ? args[5] : "");
+            metricsServer = startMetricsHttpServer(registry, port);
 
-            log.info("Pushing metrics to {} as job='{}' instance='{}'", pushgatewayUrl, jobName, instanceId);
-
-            PushGateway pushGateway = PushGateway.builder()
-                    .address(pushgatewayUrl)
-                    .registry(registry.getPrometheusRegistry())
-                    .job(jobName)
-                    .groupingKey("instance", instanceId)
-                    .build();
-
-            pusher.scheduleAtFixedRate(() -> {
-                try {
-                    pushGateway.pushAdd();
-                } catch (Exception e) {
-                    log.warn("Pushgateway push failed: {}", e.getMessage());
-                }
-            }, 0, PUSH_INTERVAL_SECONDS, TimeUnit.SECONDS);
+            HttpServer finalMetricsServer = metricsServer;
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                pusher.shutdown();
-                try { pushGateway.pushAdd(); } catch (Exception ignored) {}
-                try { pushGateway.delete();  } catch (Exception ignored) {}
+                try {
+                    finalMetricsServer.stop(0);
+                } catch (Exception ignored) {}
             }));
 
             // -------------------------
@@ -159,8 +132,6 @@ public class Main {
                 requests.shutdown();
                 requests.awaitTermination(10, TimeUnit.MINUTES);
 
-                // Keep running long enough for the final scheduled push to fire
-                // before the shutdown hook cleans up.
                 Thread.sleep(30000);
                 return;
             }
@@ -292,9 +263,33 @@ public class Main {
         }
         catch (Exception e) {
             log.error("Server error", e);
+
+            if (metricsServer != null)
+                try { metricsServer.stop(0); } catch (Exception ignored) {}
         }
-        finally {
-            pusher.shutdown();
-        }
+    }
+
+    private static HttpServer startMetricsHttpServer(PrometheusMeterRegistry registry, int port) throws IOException {
+        // 0.0.0.0 so Prometheus outside the container can scrape it
+        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+
+        server.createContext("/metrics", exchange -> {
+            byte[] body = registry.scrape().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+        });
+
+        server.setExecutor(Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "metrics-http");
+            t.setDaemon(true); // don't prevent shutdown
+            return t;
+        }));
+
+        server.start();
+        log.info("Metrics server running on http://0.0.0.0:{}/metrics", port);
+        return server;
     }
 }
