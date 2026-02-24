@@ -38,6 +38,7 @@ public class Main {
             return t;
         });
         ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
+        // TODO: Add metric for tasks created (if limit is small it might change time to time)
 
         try {
             // -------------------------
@@ -53,10 +54,6 @@ public class Main {
             // Request-level counters
             Counter reqTotal = Counter.builder("requests_total")
                     .description("Total MCP tool calls received")
-                    .register(registry);
-
-            Counter reqErrors = Counter.builder("request_errors_total")
-                    .description("Total MCP tool calls failed")
                     .register(registry);
 
             // -------------------------
@@ -220,7 +217,6 @@ public class Main {
                                     .build();
                         }
                         catch (Exception e) {
-                            reqErrors.increment();
                             return McpSchema.CallToolResult.builder()
                                     .addTextContent("ERROR: " + e.getMessage())
                                     .isError(true)
@@ -262,7 +258,6 @@ public class Main {
                                     .build();
                         }
                         catch (Exception e) {
-                            reqErrors.increment();
                             return McpSchema.CallToolResult.builder()
                                     .addTextContent("ERROR: " + e.getMessage())
                                     .isError(true)
