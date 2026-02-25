@@ -76,7 +76,12 @@ public class ToolService {
 
         log.info("Baseline tool called with limit={} TODOs", limit);
 
-        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), unfinishedTasks);
+        return new RequestStats(
+                repoAnalyser.getTodoCount(),
+                repoAnalyser.getFileCount(),
+                unfinishedTasks,
+                repoAnalyser.getTODOs()
+        );
     }
 
     /**
@@ -137,7 +142,8 @@ public class ToolService {
         return new RequestStats(
                 repoAnalyser.getTodoCount(),
                 repoAnalyser.getFileCount(),
-                unfinishedTasks
+                unfinishedTasks,
+                repoAnalyser.getTODOs()
         );
     }
 

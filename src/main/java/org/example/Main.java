@@ -179,7 +179,9 @@ public class Main {
                             RequestStats requestStats = requestScope.baselineToolProcess(limit);
                             todosMissedPerRequest.record(limit - requestStats.todoCount());
 
-                            String result = "TODOs found = " + requestStats.todoCount() + ". Scanned " + requestStats.filesScanned() + " files";
+                            String result = "TODOs found = " + requestStats.todoCount() +
+                                    ". Scanned " + requestStats.filesScanned() +
+                                    " files. Results are " + requestStats.todoTasks();
 
                             return McpSchema.CallToolResult.builder()
                                     .addTextContent(result)
@@ -220,7 +222,9 @@ public class Main {
                             RequestStats requestStats = requestScope.structuredToolProcess(limit);
                             todosMissedPerRequest.record(limit - requestStats.todoCount());
 
-                            String result = "TODOs found = " + requestStats.todoCount() + ". Scanned " + requestStats.filesScanned() + " files";
+                            String result = "TODOs found = " + requestStats.todoCount() +
+                                    ". Scanned " + requestStats.filesScanned() +
+                                    " files. Results are " + requestStats.todoTasks();
 
                             return McpSchema.CallToolResult.builder()
                                     .addTextContent(result)

@@ -43,7 +43,7 @@ public class ToolServiceOld {
 
         log.info("Baseline tool called with limit of = {} TODOs", limit);
 
-        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), activeTasks.get());
+        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), activeTasks.get(), repoAnalyser.getTODOs());
     }
 
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
@@ -82,6 +82,6 @@ public class ToolServiceOld {
 
         log.info("Structured tool called with limit of = {} TODOs", limit);
 
-        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), activeTasks.get());
+        return new RequestStats(repoAnalyser.getTodoCount(), repoAnalyser.getFileCount(), activeTasks.get(), repoAnalyser.getTODOs());
     }
 }
