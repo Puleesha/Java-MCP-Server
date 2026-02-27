@@ -105,7 +105,9 @@ public class RepoAnalyser {
     }
 
     private synchronized void addTODO(String line, CountDownLatch latch)  {
-        latch.countDown();
+        if (latch != null)
+            latch.countDown();
+
         todoCount.incrementAndGet();
         TODOs.add(line.replace("//", " "));
     }

@@ -9,7 +9,7 @@ public class TaskJoiner<T> implements StructuredTaskScope.Joiner<T, T> {
 
     private final int limit;
     private final Instant deadline;
-    private final AtomicInteger count = new AtomicInteger();
+    private final AtomicInteger filesFound = new AtomicInteger();
 
     public TaskJoiner(int limit, Instant deadline) {
         this.limit = limit;
@@ -25,13 +25,13 @@ public class TaskJoiner<T> implements StructuredTaskScope.Joiner<T, T> {
      */
     @Override
     public boolean onFork(Subtask<? extends T> subtask) {
-        return count.get() >= limit || Instant.now().isAfter(deadline);
+        return filesFound.get() >= limit || Instant.now().isAfter(deadline);
     }
 
     @Override
     public boolean onComplete(Subtask<? extends T> subtask) {
         if (subtask.state() == Subtask.State.SUCCESS)
-            if (count.incrementAndGet() >= limit)
+            if (filesFound.incrementAndGet() >= limit)
                 return false;
 
         return Instant.now().isBefore(deadline);
@@ -39,7 +39,10 @@ public class TaskJoiner<T> implements StructuredTaskScope.Joiner<T, T> {
 
     @Override
     public T result() {
-        return null; // or aggregate if needed
+        if (filesFound.get() == 0)
+            throw new IllegalStateException("No files scanned. Errors thrown for all subtasks.");
+
+        return null;
     }
 }
 
