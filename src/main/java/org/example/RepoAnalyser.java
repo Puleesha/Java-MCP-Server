@@ -31,8 +31,8 @@ public class RepoAnalyser {
      * @return  A List of the paths of all files
      */
     public List<Path> analyzeRepository(String folderPath, String typeExtension) {
-
-        Path rootDir = Paths.get(folderPath);List<String> fileType = List.of(typeExtension);
+        Path rootDir = Paths.get(folderPath);
+        List<String> fileType = List.of(typeExtension);
 
         List<Path> filesToAnalyze = new LinkedList<>();
         try {
@@ -49,8 +49,7 @@ public class RepoAnalyser {
         return filesToAnalyze;
     }
 
-    private List<Path> discoverFiles(Path rootDir,
-                                     List<String> extensions) throws IOException {
+    private List<Path> discoverFiles(Path rootDir, List<String> extensions) throws IOException {
         List<Path> result = new LinkedList<>();
 
         try (var stream = Files.walk(rootDir)) {

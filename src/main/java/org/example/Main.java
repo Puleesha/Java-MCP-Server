@@ -260,15 +260,15 @@ public class Main {
                 Main.class.wait();
             }
         }
-        catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            log.warn("Interrupted, shutting down.");
-        }
         catch (Exception e) {
-            log.error("Server error", e);
+            Thread.currentThread().interrupt();
+            log.warn("Server error");
 
-            if (metricsServer != null)
-                try { metricsServer.stop(0); } catch (Exception ignored) {}
+            if (metricsServer != null) {
+                try {
+                    metricsServer.stop(0);
+                } catch (Exception ignored) {}
+            }
         }
     }
 

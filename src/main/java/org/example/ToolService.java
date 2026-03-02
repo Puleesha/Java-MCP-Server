@@ -66,6 +66,7 @@ public class ToolService {
         }
 
         // Wait until limit reached or deadline
+        // TODO: Change / remove this method of waiting for timeout
         waitUntilQuotaOrDeadline(quotaLatch, deadlineNanos);
         int unfinishedTasks = activeTasks.get();
 
@@ -104,7 +105,7 @@ public class ToolService {
             for (Path path : filePaths) {
                 scope.fork(() -> {
                     try {
-                        // Joiner controls cancellation, so just respect interrupt
+                        // Joiner controls the cancellation so check for interrupts
                         if (Thread.currentThread().isInterrupted())
                             return null;
 
