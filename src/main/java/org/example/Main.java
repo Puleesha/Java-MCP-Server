@@ -31,7 +31,7 @@ public class Main {
 
     public static void main(String[] args) {
         HttpServer metricsServer = null;
-        ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
+        ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 10);
 
         try {
             // -------------------------
@@ -41,7 +41,6 @@ public class Main {
             // -------------------------
             // Create the registry
             PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-            String maxTODOs = args.length >= 3 ? args[3] : "0";
 
             // -------------------------
             // Request-level counters
@@ -53,7 +52,6 @@ public class Main {
             // Request latency
             Timer reqLatency = Timer.builder("request_duration_seconds")
                     .description("End-to-end MCP tool call duration")
-                    .tag("limit", maxTODOs)
                     .publishPercentileHistogram()
                     .register(registry);
 
@@ -61,13 +59,11 @@ public class Main {
             // Work completion semantics (per request)
             DistributionSummary todosCompletedPerRequest = DistributionSummary.builder("todos_completed_per_request")
                     .description("Number of TODOs completed before return or timeout")
-                    .tag("limit", maxTODOs)
                     .publishPercentileHistogram()
                     .register(registry);
 
             DistributionSummary todosMissedPerRequest = DistributionSummary.builder("todos_missed_per_request")
                     .description("Number of TODOs missed due to timeout or cancellation")
-                    .tag("limit", maxTODOs)
                     .publishPercentileHistogram()
                     .register(registry);
 
@@ -75,13 +71,12 @@ public class Main {
             // Execution control / leakage
             DistributionSummary leakedThreads = DistributionSummary.builder("leaked_threads")
                     .description("Number of threads still running after request completes")
-                    .tag("limit", maxTODOs)
                     .publishPercentileHistogram()
                     .register(registry);
 
-            String variant = (args.length >= 5) ? args[5] : "";
-
+            String variant = (args.length >= 3) ? args[3] : "";
             int port = "baseline".equals(variant) ? 9100 : 9101;
+
             log.info("Listening on port {}", port);
             registry.config().commonTags("variant", args.length >= 5 ? args[5] : "");
             metricsServer = startMetricsHttpServer(registry, port);
@@ -97,13 +92,15 @@ public class Main {
             // -------------------------
             // This section runs for benchmarking purposes
             // -------------------------
-            if (args.length >= 5 && args[0].equals("--bench")) {
-                int n = Integer.parseInt(args[1]);      // number of iterations
-                int limit = Integer.parseInt(args[3]);  // expects --limit X
-                String mode = args[5];
+            if (args.length >= 3 && args[0].equals("--bench")) {
+                int limit = Integer.parseInt(args[1]);
+                String mode = args[3];
                 ToolService requestScope = new ToolService();
+                long time = System.currentTimeMillis();
 
-                for (int i = 0; i < n; i++) {
+                log.info("Running benchmark limit of " + limit + " TODOs");
+
+                while (System.currentTimeMillis() - time <= 100000) {
                     requests.execute(() -> {
                         Timer.Sample sample = Timer.start(registry);
                         RequestStats result;
@@ -116,22 +113,22 @@ public class Main {
                             reqTotal.increment();
                             todosCompletedPerRequest.record(result.todoCount());
                             todosMissedPerRequest.record(limit - result.todoCount());
-                            log.info("Active tasks: " + result.activeTasks());
                             leakedThreads.record(result.activeTasks());
-                        } catch (InterruptedException e) {
+
+                            log.info("Active tasks: " + result.activeTasks());
+                        }
+                        catch (InterruptedException e) {
                             throw new RuntimeException(e);
-                        } finally {
+                        }
+                        finally {
                             sample.stop(reqLatency);
                         }
                     });
+                    Thread.sleep(100);
                 }
-
-                log.info("Created benchmark with " + n + " iterations");
 
                 requests.shutdown();
                 requests.awaitTermination(10, TimeUnit.MINUTES);
-
-                Thread.sleep(30000);
                 return;
             }
 
@@ -262,7 +259,7 @@ public class Main {
         }
         catch (Exception e) {
             Thread.currentThread().interrupt();
-            log.warn("Server error");
+            log.warn("Server error: " + e.getMessage());
 
             if (metricsServer != null) {
                 try {
