@@ -102,7 +102,7 @@ public class Main {
                 log.info("Running benchmark with a limit of upto " + limit + " TODOs");
 
                 while (System.currentTimeMillis() - time <= 100000) {
-                    index = index == limit ? 0 : index + 1;
+                    index = index == limit ? 1 : index + 1;
                     int currentLimit = index;
 
                     requests.execute(() -> {

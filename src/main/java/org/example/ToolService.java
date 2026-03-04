@@ -75,7 +75,7 @@ public class ToolService {
             f.cancel(true);
         }
 
-        log.info("Baseline tool called with limit={} TODOs", limit);
+        log.info("Baseline tool called with limit of {} TODOs", limit);
 
         return new RequestStats(
                 repoAnalyser.getTodoCount(),
@@ -136,7 +136,7 @@ public class ToolService {
 
         int unfinishedTasks = activeTasks.get();
 
-        log.info("Structured tool called with limit={} TODOs", limit);
+        log.info("Structured tool called with limit of {} TODOs", limit);
 
         return new RequestStats(
                 repoAnalyser.getTodoCount(),
