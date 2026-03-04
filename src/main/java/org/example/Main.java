@@ -97,22 +97,26 @@ public class Main {
                 String mode = args[3];
                 ToolService requestScope = new ToolService();
                 long time = System.currentTimeMillis();
+                int index = 0;
 
-                log.info("Running benchmark limit of " + limit + " TODOs");
+                log.info("Running benchmark with a limit of upto " + limit + " TODOs");
 
                 while (System.currentTimeMillis() - time <= 100000) {
+                    index = index == limit ? 0 : index + 1;
+                    int currentLimit = index;
+
                     requests.execute(() -> {
                         Timer.Sample sample = Timer.start(registry);
                         RequestStats result;
                         try {
                             if ("baseline".equals(mode))
-                                result = requestScope.baselineToolProcess(limit);
+                                result = requestScope.baselineToolProcess(currentLimit);
                             else
-                                result = requestScope.structuredToolProcess(limit);
+                                result = requestScope.structuredToolProcess(currentLimit);
 
                             reqTotal.increment();
                             todosCompletedPerRequest.record(result.todoCount());
-                            todosMissedPerRequest.record(limit - result.todoCount());
+                            todosMissedPerRequest.record(currentLimit - result.todoCount());
                             leakedThreads.record(result.activeTasks());
 
                             log.info("Active tasks: " + result.activeTasks());
