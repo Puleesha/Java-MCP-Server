@@ -20,7 +20,9 @@ public class RepoAnalyser {
     private final AtomicInteger todoCount = new AtomicInteger(0);
     private final AtomicInteger fileCount = new AtomicInteger(0);
     private final Semaphore connections = new Semaphore(100);
+    private final Semaphore mutex = new Semaphore(1);
     private ArrayList<String> TODOs = new ArrayList<>();
+    private static final int REQUEST_LENGTH_LIMIT = 500;
 
     /**
      * List all the files that have to be analysed
@@ -93,7 +95,11 @@ public class RepoAnalyser {
                 if (Thread.currentThread().isInterrupted())
                     return;
 
-                while (((line = reader.readLine()) != null) && todoCount.get() < limit && !Thread.currentThread().isInterrupted())
+                while (
+                    ((line = reader.readLine()) != null) &&
+                    todoCount.get() < limit && !Thread.currentThread().isInterrupted() &&
+                    (getResponseLength() + line.length()) < REQUEST_LENGTH_LIMIT
+                )
                     if (line.contains("TODO"))
                         addTODO(line, latch);
             }
@@ -103,12 +109,50 @@ public class RepoAnalyser {
         }
     }
 
+    /**
+     * Add a task to the array list
+     *
+     * @param   line The comment to be added
+     * @param   latch The countdown latch
+     */
     private synchronized void addTODO(String line, CountDownLatch latch)  {
-        if (latch != null)
-            latch.countDown();
+        try {
+            mutex.acquire();
+            if (latch != null)
+                latch.countDown();
 
-        todoCount.incrementAndGet();
-        TODOs.add(line.replace("//", " "));
+            todoCount.incrementAndGet();
+            TODOs.add(line.replace("//", " "));
+        }
+        catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        finally {
+            mutex.release();
+        }
+    }
+
+    /**
+     * Get the total length of all tasks currently in the array list
+     *
+     * @return  length of all array list tasks
+     */
+    private int getResponseLength() {
+        int totalLength = 0;
+
+        try {
+            mutex.acquire();
+            for (String s : TODOs)
+                totalLength += s.length();
+        }
+        catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        finally {
+            mutex.release();
+        }
+
+        return totalLength;
     }
 
     public int getFileCount() {
