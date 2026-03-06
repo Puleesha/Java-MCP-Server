@@ -92,6 +92,7 @@ public class ToolService {
      * - On quota or deadline: scope.shutdown() cancels remaining tasks.
      * - scope.joinUntil(deadline) enforces bounded waiting and prevents blocking forever.
      */
+    // TODO: Only checking one file and returning one TODO (Check joiner)
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
         RepoAnalyser repoAnalyser = new RepoAnalyser();
