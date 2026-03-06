@@ -35,7 +35,7 @@ public class TaskJoiner<T> implements StructuredTaskScope.Joiner<T, T> {
             if (filesFound.incrementAndGet() >= limit)
                 return false;
 
-        return Instant.now().isBefore(deadline);
+        return Instant.now().isAfter(deadline);
     }
 
     @Override

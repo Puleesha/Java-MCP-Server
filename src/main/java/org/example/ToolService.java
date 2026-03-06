@@ -56,6 +56,7 @@ public class ToolService {
                     repoAnalyser.analyzeFile(path, limit, quotaLatch);
                 }
                 catch (IOException | InterruptedException e) {
+                    log.warn("Error when analysing file = {}", e.getMessage());
                     Thread.currentThread().interrupt();
                 }
                 finally {
@@ -92,7 +93,6 @@ public class ToolService {
      * - On quota or deadline: scope.shutdown() cancels remaining tasks.
      * - scope.joinUntil(deadline) enforces bounded waiting and prevents blocking forever.
      */
-    // TODO: Only checking one file and returning one TODO (Check joiner)
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
         RepoAnalyser repoAnalyser = new RepoAnalyser();
