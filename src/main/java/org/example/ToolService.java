@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -37,7 +38,7 @@ public class ToolService {
     public RequestStats baselineToolProcess(int limit) throws InterruptedException {
 
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository", Arrays.asList(".java", ".rs", ".js"));
 
         CountDownLatch quotaLatch = new CountDownLatch(limit);
 
@@ -96,7 +97,7 @@ public class ToolService {
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository", Arrays.asList(".java", ".rs", ".js"));
         AtomicInteger activeTasks = new AtomicInteger(filePaths.size());
 
         Instant deadline = Instant.now().plus(REQUEST_DEADLINE);

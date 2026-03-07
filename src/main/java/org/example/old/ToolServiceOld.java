@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -17,7 +18,7 @@ public class ToolServiceOld {
     public RequestStats baselineToolProcess(int limit) throws InterruptedException {
         AtomicInteger activeTasks = new AtomicInteger(0);
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository", Arrays.asList(".java", ".rs", ".js"));
 
         CountDownLatch latch = new CountDownLatch(limit);
 
@@ -49,7 +50,7 @@ public class ToolServiceOld {
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
         AtomicInteger activeTasks = new AtomicInteger(0);
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository/Java", ".java");
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository", Arrays.asList(".java", ".rs", ".js"));
 
         CountDownLatch latch = new CountDownLatch(limit);
 

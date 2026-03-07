@@ -28,18 +28,17 @@ public class RepoAnalyser {
      * List all the files that have to be analysed
      *
      * @param   folderPath The folder path of the repository
-     * @param   typeExtension The language of the files to be analysed by the server
+     * @param   fileTypes The language of the files to be analysed by the server
      *
      * @return  A List of the paths of all files
      */
-    public List<Path> analyzeRepository(String folderPath, String typeExtension) {
+    public List<Path> analyzeRepository(String folderPath, List<String> fileTypes) {
         Path rootDir = Paths.get(folderPath);
-        List<String> fileType = List.of(typeExtension);
 
         List<Path> filesToAnalyze = new LinkedList<>();
         try {
             connections.acquire();
-            filesToAnalyze = discoverFiles(rootDir, fileType);
+            filesToAnalyze = discoverFiles(rootDir, fileTypes);
         }
         catch (IOException | InterruptedException e) {
             e.printStackTrace();
