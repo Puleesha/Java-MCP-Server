@@ -38,7 +38,7 @@ public class ToolService {
     public RequestStats baselineToolProcess(int limit) throws InterruptedException {
 
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository", Arrays.asList(".java", ".rs", ".js"));
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository");
 
         CountDownLatch quotaLatch = new CountDownLatch(limit);
 
@@ -97,7 +97,7 @@ public class ToolService {
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository", Arrays.asList(".java", ".rs", ".js"));
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository");
         AtomicInteger activeTasks = new AtomicInteger(filePaths.size());
 
         Instant deadline = Instant.now().plus(REQUEST_DEADLINE);

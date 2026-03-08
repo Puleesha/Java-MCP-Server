@@ -18,7 +18,7 @@ public class ToolServiceOld {
     public RequestStats baselineToolProcess(int limit) throws InterruptedException {
         AtomicInteger activeTasks = new AtomicInteger(0);
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository", Arrays.asList(".java", ".rs", ".js"));
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository");
 
         CountDownLatch latch = new CountDownLatch(limit);
 
@@ -50,7 +50,7 @@ public class ToolServiceOld {
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
         AtomicInteger activeTasks = new AtomicInteger(0);
         RepoAnalyser repoAnalyser = new RepoAnalyser();
-        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository", Arrays.asList(".java", ".rs", ".js"));
+        List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository");
 
         CountDownLatch latch = new CountDownLatch(limit);
 

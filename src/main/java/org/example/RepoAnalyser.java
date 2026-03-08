@@ -28,17 +28,16 @@ public class RepoAnalyser {
      * List all the files that have to be analysed
      *
      * @param   folderPath The folder path of the repository
-     * @param   fileTypes The language of the files to be analysed by the server
      *
      * @return  A List of the paths of all files
      */
-    public List<Path> analyzeRepository(String folderPath, List<String> fileTypes) {
+    public List<Path> analyzeRepository(String folderPath) {
         Path rootDir = Paths.get(folderPath);
 
         List<Path> filesToAnalyze = new LinkedList<>();
         try {
             connections.acquire();
-            filesToAnalyze = discoverFiles(rootDir, fileTypes);
+            filesToAnalyze = discoverFiles(rootDir);
         }
         catch (IOException | InterruptedException e) {
             e.printStackTrace();
@@ -50,27 +49,16 @@ public class RepoAnalyser {
         return filesToAnalyze;
     }
 
-    private List<Path> discoverFiles(Path rootDir, List<String> extensions) throws IOException {
+    private List<Path> discoverFiles(Path rootDir) throws IOException {
         List<Path> result = new LinkedList<>();
 
         try (var stream = Files.walk(rootDir)) {
-            stream
-                    .filter(Files::isRegularFile)
-                    .filter(path -> hasAllowedExtension(path, extensions))
+            stream.filter(Files::isRegularFile)
                     .sorted()   // Return the same set of files for every function call
                     .forEach(result::add);
         }
 
         return result;
-    }
-
-    private boolean hasAllowedExtension(Path path, List<String> extensions) {
-        String name = path.getFileName().toString().toLowerCase();
-        for (String ext : extensions)
-            if (name.endsWith(ext.toLowerCase()))
-                return true;
-
-        return false;
     }
 
     /**
