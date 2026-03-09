@@ -31,7 +31,7 @@ public class Main {
 
     public static void main(String[] args) {
         HttpServer metricsServer = null;
-        ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 10);
+        ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
 
         try {
             // -------------------------
