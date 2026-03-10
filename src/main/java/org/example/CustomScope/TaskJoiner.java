@@ -1,24 +1,20 @@
 package org.example.CustomScope;
 
-import java.time.Instant;
+import org.example.RepoAnalyser;
+
 import java.util.concurrent.StructuredTaskScope;
 import java.util.concurrent.StructuredTaskScope.Subtask;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class TaskJoiner<T> implements StructuredTaskScope.Joiner<T, T> {
 
-    private final int limit;
-    private final Instant deadline;
-    private final AtomicInteger filesFound = new AtomicInteger();
+    private RepoAnalyser repoAnalyser;
 
-    public TaskJoiner(int limit, Instant deadline) {
-        this.limit = limit;
-        this.deadline = deadline;
+    public TaskJoiner(RepoAnalyser repoAnalyser) {
+        this.repoAnalyser = repoAnalyser;
     }
 
-    // TODO: Update this method too when checking for response length
     /**
-     * This method prevents creation of new tasks after deadlines of either limit or time are passed.
+     * This method prevents creation of new tasks after deadlines when creating new tasks.
      *
      * @param   subtask The task to be executed
      *
@@ -26,23 +22,23 @@ public class TaskJoiner<T> implements StructuredTaskScope.Joiner<T, T> {
      */
     @Override
     public boolean onFork(Subtask<? extends T> subtask) {
-        return filesFound.get() >= limit || Instant.now().isAfter(deadline);
+        return repoAnalyser.isLimitReached();
     }
 
+    /**
+     * This method prevents creation of new tasks after deadlines after a subtask was completed.
+     *
+     * @param   subtask The task that was completed
+     *
+     * @return  A boolean indicating whether to cancel the scope
+     */
     @Override
     public boolean onComplete(Subtask<? extends T> subtask) {
-        if (subtask.state() == Subtask.State.SUCCESS)
-            if (filesFound.incrementAndGet() >= limit)
-                return false;
-
-        return Instant.now().isAfter(deadline);
+        return repoAnalyser.isLimitReached();
     }
 
     @Override
     public T result() {
-        if (filesFound.get() == 0)
-            throw new IllegalStateException("No files scanned. Errors thrown for all subtasks.");
-
         return null;
     }
 }

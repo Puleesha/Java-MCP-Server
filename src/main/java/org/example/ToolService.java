@@ -6,10 +6,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,9 +21,6 @@ public class ToolService {
     // Shared, global executor like a real server
     private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
 
-    // Tune these and report them in your thesis
-    private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
-
     /**
      * Baseline variant:
      * - Submits work directly to the shared executor (unstructured).
@@ -37,45 +30,55 @@ public class ToolService {
      */
     public RequestStats baselineToolProcess(int limit) throws InterruptedException {
 
-        RepoAnalyser repoAnalyser = new RepoAnalyser();
+        RepoAnalyser repoAnalyser = new RepoAnalyser(limit);
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository");
 
-        CountDownLatch quotaLatch = new CountDownLatch(limit);
-
-        List<Future<?>> futures = new ArrayList<>(filePaths.size());
+        AtomicInteger todoCount = new AtomicInteger(0);
         AtomicInteger activeTasks = new AtomicInteger(filePaths.size());
 
-        long deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
+        //------------------------------------------------
+        // Spawn tasks (unstructured)
+        //------------------------------------------------
 
         for (Path path : filePaths) {
-            Future<?> f = tasks.submit(() -> {
+            tasks.submit(() -> {
                 try {
-                    // Cancel check for interruption
-                    if (Thread.currentThread().isInterrupted())
+                    if (todoCount.get() >= limit)
                         return;
 
-                    repoAnalyser.analyzeFile(path, limit, quotaLatch);
+                    repoAnalyser.analyzeFile(path);
                 }
                 catch (IOException | InterruptedException e) {
                     log.warn("Error when analysing file = {}", e.getMessage());
-                    Thread.currentThread().interrupt();
                 }
                 finally {
                     activeTasks.decrementAndGet();
                 }
             });
-            futures.add(f);
         }
 
-        // Wait until limit reached or deadline
-        // TODO: Change / remove this method of waiting for timeout
-        waitUntilQuotaOrDeadline(quotaLatch, deadlineNanos);
+        //------------------------------------------------
+        // Wait until quota or deadline
+        //------------------------------------------------
+
+        while (!repoAnalyser.isLimitReached()) {
+            if (todoCount.get() >= limit)
+                break;
+
+            try {
+                Thread.sleep(1);
+            }
+            catch (InterruptedException e) {
+                log.warn("Sleep interrupted = {}",  e.getMessage());
+            }
+        }
+
+        //------------------------------------------------
+        // Parent stops waiting
+        // Tasks may still run
+        //------------------------------------------------
+
         int unfinishedTasks = activeTasks.get();
-
-        // Best-effort cancel: interrupt running tasks + prevent queued tasks from starting
-        for (Future<?> f : futures) {
-            f.cancel(true);
-        }
 
         log.info("Baseline tool called with limit of {} TODOs", limit);
 
@@ -96,12 +99,10 @@ public class ToolService {
      */
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
-        RepoAnalyser repoAnalyser = new RepoAnalyser();
+        RepoAnalyser repoAnalyser = new RepoAnalyser(limit);
         List<Path> filePaths = repoAnalyser.analyzeRepository("/app/MockRepository");
         AtomicInteger activeTasks = new AtomicInteger(filePaths.size());
-
-        Instant deadline = Instant.now().plus(REQUEST_DEADLINE);
-        TaskJoiner<Void> joiner = new TaskJoiner<>(limit, deadline);
+        TaskJoiner<Void> joiner = new TaskJoiner<>(repoAnalyser);
 
         try (var scope = StructuredTaskScope.open(joiner)) {
             for (Path path : filePaths) {
@@ -111,7 +112,7 @@ public class ToolService {
                         if (Thread.currentThread().isInterrupted())
                             return null;
 
-                        repoAnalyser.analyzeFile(path, limit, null);
+                        repoAnalyser.analyzeFile(path);
                     }
                     catch (IOException e) {
                         Thread.currentThread().interrupt();
@@ -146,26 +147,5 @@ public class ToolService {
                 unfinishedTasks,
                 repoAnalyser.getTODOs()
         );
-    }
-
-
-    /**
-     * Returns true if quota reached before deadline, false otherwise.
-     */
-    private boolean waitUntilQuotaOrDeadline(CountDownLatch latch, long deadlineNanos) {
-        long remaining;
-        while (true) {
-            remaining = deadlineNanos - System.nanoTime();
-            if (remaining <= 0) return false;
-
-            try {
-                // Wait in small chunks so we can respect deadline precisely
-                long chunk = Math.min(TimeUnit.MILLISECONDS.toNanos(50), remaining);
-                if (latch.await(chunk, TimeUnit.NANOSECONDS)) return true;
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
-        }
     }
 }

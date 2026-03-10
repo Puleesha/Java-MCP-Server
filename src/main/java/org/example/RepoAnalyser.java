@@ -4,9 +4,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -17,12 +18,24 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RepoAnalyser {
 
+    private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
+    private static final int REQUEST_LENGTH_LIMIT = 500;
+
     private final AtomicInteger todoCount = new AtomicInteger(0);
     private final AtomicInteger fileCount = new AtomicInteger(0);
     private final Semaphore connections = new Semaphore(100);
     private final Semaphore mutex = new Semaphore(1);
-    private ArrayList<String> TODOs = new ArrayList<>();
-    private static final int REQUEST_LENGTH_LIMIT = 500;
+
+    private final AtomicBoolean limitReached = new AtomicBoolean(false);
+    long deadlineNanos;
+    int taskLimit;
+    private ArrayList<String> TODOs;
+
+    public RepoAnalyser(int limit) {
+        deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
+        taskLimit = limit;
+        TODOs = new ArrayList<>();
+    }
 
     /**
      * List all the files that have to be analysed
@@ -65,13 +78,11 @@ public class RepoAnalyser {
      * This method analyses the file and will be called sequentially or concurrently based on the server variant
      *
      * @param   file The path of the file
-     * @param   limit The number of TODOs to be retrieved
-     * @param   latch Countdown latch tracking the number of TODOs found
      *
      * @throws  IOException If the reader throws and error
      * @throws  InterruptedException If the Thread.sleep() is interrupted
      */
-    public void analyzeFile(Path file, int limit, CountDownLatch latch) throws IOException, InterruptedException {
+    public void analyzeFile(Path file) throws IOException, InterruptedException {
         try {
             connections.acquire();
 
@@ -82,13 +93,20 @@ public class RepoAnalyser {
                 if (Thread.currentThread().isInterrupted())
                     return;
 
-                while (
-                    ((line = reader.readLine()) != null) &&
-                    todoCount.get() < limit && !Thread.currentThread().isInterrupted() &&
-                    (getResponseLength() + line.length()) < REQUEST_LENGTH_LIMIT
-                )
+                while (((line = reader.readLine()) != null) && !Thread.currentThread().isInterrupted()) {
+
+                    if (
+                            (todoCount.get() >= taskLimit) ||
+                            ((getResponseLength() + line.length()) >= REQUEST_LENGTH_LIMIT) ||
+                            (System.nanoTime() <  deadlineNanos)
+                    ) {
+                        limitReached.set(true);
+                        break;
+                    }
+
                     if (line.contains("TODO"))
-                        addTODO(line, latch);
+                        addTODO(line);
+                }
             }
         }
         finally {
@@ -100,13 +118,10 @@ public class RepoAnalyser {
      * Add a task to the array list
      *
      * @param   line The comment to be added
-     * @param   latch The countdown latch
      */
-    private synchronized void addTODO(String line, CountDownLatch latch)  {
+    private synchronized void addTODO(String line)  {
         try {
             mutex.acquire();
-            if (latch != null)
-                latch.countDown();
 
             todoCount.incrementAndGet();
             TODOs.add(line.replace("//", " "));
@@ -152,5 +167,14 @@ public class RepoAnalyser {
 
     public String getTODOs() {
         return TODOs.toString();
+    }
+
+    /**
+     * Checks if the response length or the task limit or time limit is reached
+     *
+     * @return  Boolean indicating if any of the limits were reached
+     */
+    public boolean isLimitReached() {
+        return limitReached.get();
     }
 }
