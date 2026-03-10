@@ -49,7 +49,7 @@ public class ToolService {
                     repoAnalyser.analyzeFile(path);
                 }
                 catch (IOException | InterruptedException e) {
-                    log.warn("Error when analysing file = {}", e.getMessage());
+                    log.error("Error when analysing file = {}", e.getMessage());
                 }
                 finally {
                     activeTasks.decrementAndGet();
@@ -69,7 +69,7 @@ public class ToolService {
                 Thread.sleep(1);
             }
             catch (InterruptedException e) {
-                log.warn("Sleep interrupted = {}",  e.getMessage());
+                log.error("Sleep interrupted = {}",  e.getMessage());
             }
         }
 

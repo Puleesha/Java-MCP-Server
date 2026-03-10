@@ -99,7 +99,7 @@ public class Main {
                 long time = System.currentTimeMillis();
                 int index = 0;
 
-                log.info("Running benchmark with a limit of upto " + limit + " TODOs");
+                log.info("Running benchmark with a limit of upto {} TODOs", limit);
 
                 while (System.currentTimeMillis() - time <= 100000) {
                     index = index == limit ? 1 : index + 1;
@@ -119,7 +119,7 @@ public class Main {
                             todosMissedPerRequest.record(currentLimit - result.todoCount());
                             leakedThreads.record(result.activeTasks());
 
-                            log.info("Active tasks: " + result.activeTasks());
+                            log.info("Active tasks: {}", result.activeTasks());
                         }
                         catch (InterruptedException e) {
                             throw new RuntimeException(e);
@@ -168,7 +168,7 @@ public class Main {
                             null,
                             null
                     ))
-                    .callHandler((exchange, toolReq) -> {
+                    .callHandler((_, toolReq) -> {
                         reqTotal.increment();
                         Timer.Sample sample = Timer.start(registry);
 
@@ -211,7 +211,7 @@ public class Main {
                             null,
                             null
                     ))
-                    .callHandler((exchange, toolReq) -> {
+                    .callHandler((_, toolReq) -> {
                         reqTotal.increment();
                         Timer.Sample sample = Timer.start(registry);
 
@@ -244,7 +244,7 @@ public class Main {
                     })
                     .build();
 
-            McpSyncServer server = McpServer.sync(transport)
+            McpSyncServer _ = McpServer.sync(transport)
                     .serverInfo("baseline-java-mcp", "1.0.0")
                     .capabilities(McpSchema.ServerCapabilities.builder()
                             .tools(true)
@@ -263,7 +263,7 @@ public class Main {
         }
         catch (Exception e) {
             Thread.currentThread().interrupt();
-            log.warn("Server error: " + e.getMessage());
+            log.error("Server error: {}", e.getMessage());
 
             if (metricsServer != null) {
                 try {

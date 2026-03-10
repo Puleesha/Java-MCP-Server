@@ -1,5 +1,8 @@
 package org.example;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @since   05/12/2025
  */
 public class RepoAnalyser {
+    private static final Logger log = LoggerFactory.getLogger(RepoAnalyser.class);
 
     private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
     private static final int REQUEST_LENGTH_LIMIT = 500;
@@ -26,10 +30,10 @@ public class RepoAnalyser {
     private final Semaphore connections = new Semaphore(100);
     private final Semaphore mutex = new Semaphore(1);
 
+    private final ArrayList<String> TODOs;
     private final AtomicBoolean limitReached = new AtomicBoolean(false);
     long deadlineNanos;
     int taskLimit;
-    private ArrayList<String> TODOs;
 
     public RepoAnalyser(int limit) {
         deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
@@ -53,7 +57,7 @@ public class RepoAnalyser {
             filesToAnalyze = discoverFiles(rootDir);
         }
         catch (IOException | InterruptedException e) {
-            e.printStackTrace();
+            log.error("Error while analyzing files", e);
         }
         finally {
             connections.release();

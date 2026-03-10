@@ -7,7 +7,7 @@ import java.util.concurrent.StructuredTaskScope.Subtask;
 
 public class TaskJoiner<T> implements StructuredTaskScope.Joiner<T, T> {
 
-    private RepoAnalyser repoAnalyser;
+    private final RepoAnalyser repoAnalyser;
 
     public TaskJoiner(RepoAnalyser repoAnalyser) {
         this.repoAnalyser = repoAnalyser;
