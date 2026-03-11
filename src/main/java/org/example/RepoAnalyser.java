@@ -28,7 +28,6 @@ public class RepoAnalyser {
     private final AtomicInteger todoCount = new AtomicInteger(0);
     private final AtomicInteger fileCount = new AtomicInteger(0);
     private final Semaphore connections = new Semaphore(100);
-    private final Semaphore mutex = new Semaphore(1);
 
     private final ArrayList<String> TODOs;
     private final AtomicBoolean limitReached = new AtomicBoolean(false);
@@ -124,18 +123,8 @@ public class RepoAnalyser {
      * @param   line The comment to be added
      */
     private synchronized void addTODO(String line)  {
-        try {
-            mutex.acquire();
-
-            todoCount.incrementAndGet();
-            TODOs.add(line.replace("//", " "));
-        }
-        catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        finally {
-            mutex.release();
-        }
+        todoCount.incrementAndGet();
+        TODOs.add(line.replace("//", " "));
     }
 
     /**
@@ -143,20 +132,11 @@ public class RepoAnalyser {
      *
      * @return  length of all array list tasks
      */
-    private int getResponseLength() {
+    private synchronized int getResponseLength() {
         int totalLength = 0;
 
-        try {
-            mutex.acquire();
-            for (String s : TODOs)
-                totalLength += s.length();
-        }
-        catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        finally {
-            mutex.release();
-        }
+        for (String s : TODOs)
+            totalLength += s.length();
 
         return totalLength;
     }
