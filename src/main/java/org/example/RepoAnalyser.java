@@ -10,7 +10,6 @@ import java.nio.file.*;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -30,7 +29,6 @@ public class RepoAnalyser {
     private final Semaphore connections = new Semaphore(100);
 
     private final ArrayList<String> TODOs;
-    private final AtomicBoolean limitReached = new AtomicBoolean(false);
     long deadlineNanos;
     int taskLimit;
 
@@ -96,20 +94,9 @@ public class RepoAnalyser {
                 if (Thread.currentThread().isInterrupted())
                     return;
 
-                while (((line = reader.readLine()) != null) && !Thread.currentThread().isInterrupted()) {
-
-                    if (
-                            (todoCount.get() >= taskLimit) ||
-                            ((getResponseLength() + line.length()) >= REQUEST_LENGTH_LIMIT) ||
-                            (System.nanoTime() <  deadlineNanos)
-                    ) {
-                        limitReached.set(true);
-                        break;
-                    }
-
+                while (((line = reader.readLine()) != null) && !Thread.currentThread().isInterrupted())
                     if (line.contains("TODO"))
                         addTODO(line);
-                }
             }
         }
         finally {
@@ -159,6 +146,8 @@ public class RepoAnalyser {
      * @return  Boolean indicating if any of the limits were reached
      */
     public boolean isLimitReached() {
-        return limitReached.get();
+        return  (todoCount.get() >= taskLimit) ||
+                (getResponseLength() >= REQUEST_LENGTH_LIMIT) ||
+                (System.nanoTime() > deadlineNanos);
     }
 }
