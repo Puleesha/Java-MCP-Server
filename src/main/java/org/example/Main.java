@@ -62,11 +62,6 @@ public class Main {
                     .publishPercentileHistogram()
                     .register(registry);
 
-            DistributionSummary todosMissedPerRequest = DistributionSummary.builder("todos_missed_per_request")
-                    .description("Number of TODOs missed due to timeout or cancellation")
-                    .publishPercentileHistogram()
-                    .register(registry);
-
             // -------------------------
             // Execution control / leakage
             DistributionSummary leakedThreads = DistributionSummary.builder("leaked_threads")
@@ -116,7 +111,6 @@ public class Main {
 
                             reqTotal.increment();
                             todosCompletedPerRequest.record(result.todoCount());
-                            todosMissedPerRequest.record(currentLimit - result.todoCount());
                             leakedThreads.record(result.activeTasks());
 
                             log.info("Active tasks: {}", result.activeTasks());
@@ -178,7 +172,6 @@ public class Main {
 
                             ToolService requestScope = new ToolService();
                             RequestStats requestStats = requestScope.baselineToolProcess(limit);
-                            todosMissedPerRequest.record(limit - requestStats.todoCount());
 
                             String result = "TODOs found = " + requestStats.todoTasks() +
                                     ". Scanned " + requestStats.filesScanned() +
@@ -221,7 +214,6 @@ public class Main {
 
                             ToolService requestScope = new ToolService();
                             RequestStats requestStats = requestScope.structuredToolProcess(limit);
-                            todosMissedPerRequest.record(limit - requestStats.todoCount());
 
                             String result = "TODOs found = " + requestStats.todoTasks() +
                                     ". Scanned " + requestStats.filesScanned() +
