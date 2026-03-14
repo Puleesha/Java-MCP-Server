@@ -136,7 +136,7 @@ public class RepoAnalyser {
         return todoCount.get();
     }
 
-    public String getTODOs() {
+    public synchronized String getTODOs() {
         return TODOs.toString();
     }
 

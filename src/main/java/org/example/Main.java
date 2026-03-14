@@ -22,16 +22,13 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
         HttpServer metricsServer = null;
-        ExecutorService requests = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 4);
 
         try {
             // -------------------------
@@ -100,33 +97,29 @@ public class Main {
                     index = index == limit ? 1 : index + 1;
                     int currentLimit = index;
 
-                    requests.execute(() -> {
-                        Timer.Sample sample = Timer.start(registry);
-                        RequestStats result;
-                        try {
-                            if ("baseline".equals(mode))
-                                result = requestScope.baselineToolProcess(currentLimit);
-                            else
-                                result = requestScope.structuredToolProcess(currentLimit);
+                    Timer.Sample sample = Timer.start(registry);
+                    RequestStats result;
+                    try {
+                        if ("baseline".equals(mode))
+                            result = requestScope.baselineToolProcess(currentLimit);
+                        else
+                            result = requestScope.structuredToolProcess(currentLimit);
 
-                            reqTotal.increment();
-                            todosCompletedPerRequest.record(result.todoCount());
-                            leakedThreads.record(result.activeTasks());
+                        reqTotal.increment();
+                        todosCompletedPerRequest.record(result.todoCount());
+                        leakedThreads.record(result.activeTasks());
 
-                            log.info("Active tasks: {}", result.activeTasks());
-                        }
-                        catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                        finally {
-                            sample.stop(reqLatency);
-                        }
-                    });
+                        log.info("Active tasks: {}", result.activeTasks());
+                    }
+                    catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                    finally {
+                        sample.stop(reqLatency);
+                    }
                     Thread.sleep(100);
                 }
 
-                requests.shutdown();
-                requests.awaitTermination(10, TimeUnit.MINUTES);
                 return;
             }
 
@@ -255,7 +248,7 @@ public class Main {
         }
         catch (Exception e) {
             Thread.currentThread().interrupt();
-            log.error("Server error: {}", e.getMessage());
+            log.error("Error in main file: {}", e.getMessage());
 
             if (metricsServer != null) {
                 try {

@@ -19,7 +19,7 @@ public class ToolService {
     private static final Logger log = LoggerFactory.getLogger(ToolService.class);
 
     // Shared, global executor like a real server
-    private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
+    private final ExecutorService tasks = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
     /**
      * Baseline variant:
