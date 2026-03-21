@@ -24,6 +24,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 
+/**
+ * The main class containing both the Java MCP server variants
+ */
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
