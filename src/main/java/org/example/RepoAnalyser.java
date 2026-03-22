@@ -22,7 +22,7 @@ public class RepoAnalyser {
     private static final Logger log = LoggerFactory.getLogger(RepoAnalyser.class);
 
     private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
-    private static final int REQUEST_LENGTH_LIMIT = 500;
+    private static final int REQUEST_LENGTH_LIMIT = 2000;
 
     private final AtomicInteger todoCount = new AtomicInteger(0);
     private final AtomicInteger fileCount = new AtomicInteger(0);
