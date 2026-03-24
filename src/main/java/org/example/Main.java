@@ -1,28 +1,20 @@
 package org.example;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpServer;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.Timer;
-import io.micrometer.prometheusmetrics.PrometheusConfig;
-import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.prometheus.metrics.core.metrics.Counter;
+import io.prometheus.metrics.core.metrics.Histogram;
+import io.prometheus.metrics.exporter.httpserver.HTTPServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 
 /**
  * The main class containing both the Java MCP server variants
@@ -31,58 +23,40 @@ public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
-        HttpServer metricsServer = null;
 
         try {
             // -------------------------
             // Prometheus pull metrics
             // -------------------------
 
-            // -------------------------
-            // Create the registry
-            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+            Counter reqTotal = Counter.builder()
+                    .name("requests_total")
+                    .help("Total MCP tool calls received")
+                    .register();
 
-            // -------------------------
-            // Request-level counters
-            Counter reqTotal = Counter.builder("requests_total")
-                    .description("Total MCP tool calls received")
-                    .register(registry);
+            Histogram reqLatency = Histogram.builder()
+                    .name("request_duration_seconds")
+                    .help("End-to-end MCP tool call duration")
+                    .register();
 
-            // -------------------------
-            // Request latency
-            Timer reqLatency = Timer.builder("request_duration_seconds")
-                    .description("End-to-end MCP tool call duration")
-                    .publishPercentileHistogram()
-                    .register(registry);
+            Histogram todosCompletedPerRequest = Histogram.builder()
+                    .name("todos_completed_per_request")
+                    .help("Number of TODOs completed before return or timeout")
+                    .register();
 
-            // -------------------------
-            // Work completion semantics (per request)
-            DistributionSummary todosCompletedPerRequest = DistributionSummary.builder("todos_completed_per_request")
-                    .description("Number of TODOs completed before return or timeout")
-                    .publishPercentileHistogram()
-                    .register(registry);
-
-            // -------------------------
-            // Execution control / leakage
-            DistributionSummary leakedThreads = DistributionSummary.builder("leaked_threads")
-                    .description("Number of threads still running after request completes")
-                    .publishPercentileHistogram()
-                    .register(registry);
+            Histogram leakedThreads = Histogram.builder()
+                    .name("leaked_threads")
+                    .help("Number of threads still running after request completes")
+                    .register();
 
             String variant = (args.length >= 3) ? args[3] : "";
             int port = "baseline".equals(variant) ? 9100 : 9101;
 
             log.info("Listening on port {}", port);
-            registry.config().commonTags("variant", args.length >= 5 ? args[5] : "");
-            metricsServer = startMetricsHttpServer(registry, port);
 
-            HttpServer finalMetricsServer = metricsServer;
+            HTTPServer _ = HTTPServer.builder().port(port).buildAndStart();
 
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                try {
-                    finalMetricsServer.stop(0);
-                } catch (Exception ignored) {}
-            }));
+            log.info("Metrics server running on http://0.0.0.0:{}/metrics", port);
 
             // -------------------------
             // This section runs for benchmarking purposes
@@ -99,18 +73,15 @@ public class Main {
                 while (System.currentTimeMillis() - time <= 100000) {
                     index = index == limit ? 1 : index + 1;
                     int currentLimit = index;
+                    long startTime = System.nanoTime();
 
-                    Timer.Sample sample = Timer.start(registry);
-                    RequestStats result;
                     try {
-                        if ("baseline".equals(mode))
-                            result = requestScope.baselineToolProcess(currentLimit);
-                        else
-                            result = requestScope.structuredToolProcess(currentLimit);
+                        RequestStats result = "baseline".equals(mode) ? requestScope.baselineToolProcess(currentLimit) :
+                                requestScope.structuredToolProcess(currentLimit);
 
-                        reqTotal.increment();
-                        todosCompletedPerRequest.record(result.todoCount());
-                        leakedThreads.record(result.activeTasks());
+                        reqTotal.inc();
+                        todosCompletedPerRequest.observe(result.todoCount());
+                        leakedThreads.observe(result.activeTasks());
 
                         log.info("Active tasks: {}", result.activeTasks());
                     }
@@ -118,7 +89,8 @@ public class Main {
                         throw new RuntimeException(e);
                     }
                     finally {
-                        sample.stop(reqLatency);
+                        double latency = (System.nanoTime() - startTime) / 1_000_000_000.0;
+                        reqLatency.observe(latency);
                     }
                     Thread.sleep(100);
                 }
@@ -159,8 +131,8 @@ public class Main {
                             null
                     ))
                     .callHandler((_, toolReq) -> {
-                        reqTotal.increment();
-                        Timer.Sample sample = Timer.start(registry);
+                        reqTotal.inc();
+                        long startTime = System.nanoTime();
 
                         try {
                             Map<String, Object> arguments = toolReq.arguments();
@@ -185,7 +157,8 @@ public class Main {
                                     .build();
                         }
                         finally {
-                            sample.stop(reqLatency);
+                            double latency = (System.nanoTime() - startTime) / 1_000_000_000.0;
+                            reqLatency.observe(latency);
                         }
                     })
                     .build();
@@ -201,8 +174,8 @@ public class Main {
                             null
                     ))
                     .callHandler((_, toolReq) -> {
-                        reqTotal.increment();
-                        Timer.Sample sample = Timer.start(registry);
+                        reqTotal.inc();
+                        long startTime = System.nanoTime();
 
                         try {
                             Map<String, Object> arguments = toolReq.arguments();
@@ -227,7 +200,8 @@ public class Main {
                                     .build();
                         }
                         finally {
-                            sample.stop(reqLatency);
+                            double latency = (System.nanoTime() - startTime) / 1_000_000_000.0;
+                            reqLatency.observe(latency);
                         }
                     })
                     .build();
@@ -244,7 +218,6 @@ public class Main {
 
             log.info("Java MCP Server ready (stdio). Waiting for calls...");
 
-            // Keep alive for the gateway session
             synchronized (Main.class) {
                 Main.class.wait();
             }
@@ -252,36 +225,6 @@ public class Main {
         catch (Exception e) {
             Thread.currentThread().interrupt();
             log.error("Error in main file: {}", e.getMessage());
-
-            if (metricsServer != null) {
-                try {
-                    metricsServer.stop(0);
-                } catch (Exception ignored) {}
-            }
         }
-    }
-
-    private static HttpServer startMetricsHttpServer(PrometheusMeterRegistry registry, int port) throws IOException {
-        // 0.0.0.0 so Prometheus outside the container can scrape it
-        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-
-        server.createContext("/metrics", exchange -> {
-            byte[] body = registry.scrape().getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
-            exchange.sendResponseHeaders(200, body.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(body);
-            }
-        });
-
-        server.setExecutor(Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "metrics-http");
-            t.setDaemon(true); // don't prevent shutdown
-            return t;
-        }));
-
-        server.start();
-        log.info("Metrics server running on http://0.0.0.0:{}/metrics", port);
-        return server;
     }
 }
