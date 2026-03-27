@@ -131,9 +131,6 @@ public class Main {
                             null
                     ))
                     .callHandler((_, toolReq) -> {
-                        reqTotal.inc();
-                        long startTime = System.nanoTime();
-
                         try {
                             Map<String, Object> arguments = toolReq.arguments();
                             int limit = ((Number) arguments.get("limit")).intValue();
@@ -156,10 +153,6 @@ public class Main {
                                     .isError(true)
                                     .build();
                         }
-                        finally {
-                            double latency = (System.nanoTime() - startTime) / 1_000_000_000.0;
-                            reqLatency.observe(latency);
-                        }
                     })
                     .build();
 
@@ -174,9 +167,6 @@ public class Main {
                             null
                     ))
                     .callHandler((_, toolReq) -> {
-                        reqTotal.inc();
-                        long startTime = System.nanoTime();
-
                         try {
                             Map<String, Object> arguments = toolReq.arguments();
                             int limit = ((Number) arguments.get("limit")).intValue();
@@ -199,10 +189,6 @@ public class Main {
                                     .isError(true)
                                     .build();
                         }
-                        finally {
-                            double latency = (System.nanoTime() - startTime) / 1_000_000_000.0;
-                            reqLatency.observe(latency);
-                        }
                     })
                     .build();
 
@@ -216,7 +202,7 @@ public class Main {
                     .tools(List.of(analyzeRepoBaseline, analyzeRepoStructured))
                     .build();
 
-            log.info("Java MCP Server ready (stdio). Waiting for calls...");
+            log.info("Java MCP Server ready. Waiting for calls...");
 
             synchronized (Main.class) {
                 Main.class.wait();
