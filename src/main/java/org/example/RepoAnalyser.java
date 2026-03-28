@@ -109,9 +109,15 @@ public class RepoAnalyser {
      *
      * @param   line The comment to be added
      */
-    private synchronized void addTODO(String line)  {
-        todoCount.incrementAndGet();
-        TODOs.add(line.replace("//", " "));
+    private synchronized void addTODO(String line) {
+        String newTask = line.replace("//", " ");
+
+        if (!(todoCount.get() >= taskLimit ||
+                getResponseLength() + newTask.length() > REQUEST_LENGTH_LIMIT ||
+                System.nanoTime() > deadline)) {
+            TODOs.add(newTask);
+            todoCount.incrementAndGet();
+        }
     }
 
     /**
@@ -146,8 +152,6 @@ public class RepoAnalyser {
      * @return  Boolean indicating if any of the limits were reached
      */
     public boolean isLimitReached() {
-        return  (todoCount.get() >= taskLimit) ||
-                (getResponseLength() >= REQUEST_LENGTH_LIMIT) ||
-                (System.nanoTime() > deadline);
+        return (todoCount.get() >= taskLimit) || (System.nanoTime() > deadline);
     }
 }
