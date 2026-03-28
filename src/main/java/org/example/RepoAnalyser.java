@@ -13,7 +13,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- *  This class represent a repository analyser, where it can access files within a folder and return the number of lines and TODOs present.
+ *  This class represent a repository analyser, where it can access files within a folder and return the TODOs present.
  *
  * @author  Puleesha Vilhan
  * @since   05/12/2025
@@ -29,11 +29,11 @@ public class RepoAnalyser {
     private final Semaphore connections = new Semaphore(100);
 
     private final ArrayList<String> TODOs;
-    long deadlineNanos;
+    long deadline;
     int taskLimit;
 
     public RepoAnalyser(int limit) {
-        deadlineNanos = System.nanoTime() + REQUEST_DEADLINE.toNanos();
+        deadline = System.nanoTime() + REQUEST_DEADLINE.toNanos();
         taskLimit = limit;
         TODOs = new ArrayList<>();
     }
@@ -148,6 +148,6 @@ public class RepoAnalyser {
     public boolean isLimitReached() {
         return  (todoCount.get() >= taskLimit) ||
                 (getResponseLength() >= REQUEST_LENGTH_LIMIT) ||
-                (System.nanoTime() > deadlineNanos);
+                (System.nanoTime() > deadline);
     }
 }

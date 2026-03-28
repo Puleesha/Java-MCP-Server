@@ -58,7 +58,7 @@ public class ToolService {
         }
 
         //------------------------------------------------
-        // Wait until quota or deadline
+        // Wait until the deadline
         //------------------------------------------------
 
         while (!repoAnalyser.isLimitReached()) {
@@ -72,11 +72,6 @@ public class ToolService {
                 log.error("Sleep interrupted = {}",  e.getMessage());
             }
         }
-
-        //------------------------------------------------
-        // Parent stops waiting
-        // Tasks may still run
-        //------------------------------------------------
 
         int unfinishedTasks = activeTasks.get();
 
@@ -92,10 +87,9 @@ public class ToolService {
 
     /**
      * Structured variant:
-     * - Creates a per-request scope on top of the SAME shared executor.
-     * - All task spawning goes through the scope.
-     * - On quota or deadline: scope.shutdown() cancels remaining tasks.
-     * - scope.joinUntil(deadline) enforces bounded waiting and prevents blocking forever.
+     * - Creates a new scope per request
+     * - All task created goes through the scope.
+     * - On deadline: scope cancels remaining tasks.
      */
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
@@ -125,13 +119,10 @@ public class ToolService {
                 });
             }
 
-            // This blocks until joiner decides:
-            // - quota reached OR
-            // - deadline reached OR
-            // - all tasks finished
+            // Blocks until limit reached or tasks completed
             scope.join();
-
-        } catch (InterruptedException ie) {
+        }
+        catch (InterruptedException ie) {
 
             Thread.currentThread().interrupt();
             throw ie;

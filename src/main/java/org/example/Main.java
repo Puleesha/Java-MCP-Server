@@ -64,7 +64,7 @@ public class Main {
             if (args.length >= 3 && args[0].equals("--bench")) {
                 int limit = Integer.parseInt(args[1]);
                 String mode = args[3];
-                ToolService requestScope = new ToolService();
+                ToolService toolService = new ToolService();
                 long time = System.currentTimeMillis();
                 int index = 0;
 
@@ -76,8 +76,8 @@ public class Main {
                     long startTime = System.nanoTime();
 
                     try {
-                        RequestStats result = "baseline".equals(mode) ? requestScope.baselineToolProcess(currentLimit) :
-                                requestScope.structuredToolProcess(currentLimit);
+                        RequestStats result = "baseline".equals(mode) ? toolService.baselineToolProcess(currentLimit) :
+                                toolService.structuredToolProcess(currentLimit);
 
                         reqTotal.inc();
                         todosCompletedPerRequest.observe(result.todoCount());
@@ -193,7 +193,7 @@ public class Main {
                     .build();
 
             McpSyncServer _ = McpServer.sync(transport)
-                    .serverInfo("baseline-java-mcp", "1.0.0")
+                    .serverInfo("Java MCP Server", "1.0.0")
                     .capabilities(McpSchema.ServerCapabilities.builder()
                             .tools(true)
                             .logging()
