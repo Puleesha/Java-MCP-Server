@@ -3,6 +3,7 @@ global:
 
 scrape_configs:
   - job_name: "mcp_java_benchmark"
+    fallback_scrape_protocol: PrometheusText0.0.4
     static_configs:
       - targets: ["host.docker.internal:9100"]
         labels:
@@ -12,10 +13,11 @@ scrape_configs:
           variant: "java_structured"
 
   - job_name: "mcp_rust_benchmark"
+    fallback_scrape_protocol: PrometheusText0.0.4
     static_configs:
-      - targets: [ "host.docker.internal:9102" ]
+      - targets: ["host.docker.internal:9102"]
         labels:
           variant: "rust_baseline"
-      - targets: [ "host.docker.internal:9103" ]
+      - targets: ["host.docker.internal:9103"]
         labels:
           variant: "rust_structured"
