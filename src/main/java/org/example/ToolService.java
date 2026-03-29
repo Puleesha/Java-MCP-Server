@@ -18,15 +18,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ToolService {
     private static final Logger log = LoggerFactory.getLogger(ToolService.class);
 
-    // Shared, global executor like a real server
-    private final ExecutorService tasks = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+    // Shared, global thread pool simulating a server
+    private final ExecutorService tasks = Executors.newFixedThreadPool(8);
 
     /**
      * Baseline variant:
-     * - Submits work directly to the shared executor (unstructured).
+     * - Submits work directly to the shared thread pool.
      * - Waits until quota reached OR deadline reached.
-     * - Best-effort cancellation by Future.cancel(true).
-     * - Does NOT guarantee clean join/cleanup (intentionally).
+     * - Does not guarantee proper task cancellation.
      */
     public RequestStats baselineToolProcess(int limit) throws InterruptedException {
 
@@ -37,7 +36,7 @@ public class ToolService {
         AtomicInteger activeTasks = new AtomicInteger(filePaths.size());
 
         //------------------------------------------------
-        // Spawn tasks (unstructured)
+        // Create tasks (unstructured)
         //------------------------------------------------
 
         for (Path path : filePaths) {
@@ -89,7 +88,7 @@ public class ToolService {
      * Structured variant:
      * - Creates a new scope per request
      * - All task created goes through the scope.
-     * - On deadline: scope cancels remaining tasks.
+     * - On deadline, the scope cancels remaining tasks.
      */
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
@@ -102,7 +101,7 @@ public class ToolService {
             for (Path path : filePaths) {
                 scope.fork(() -> {
                     try {
-                        // Joiner controls the cancellation so check for interrupts
+                        // Joiner controls the cancellation so we check for interrupts
                         if (Thread.currentThread().isInterrupted())
                             return null;
 

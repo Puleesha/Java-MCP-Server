@@ -26,7 +26,7 @@ public class Main {
 
         try {
             // -------------------------
-            // Prometheus pull metrics
+            // Prometheus server metrics
             // -------------------------
 
             Counter reqTotal = Counter.builder()
