@@ -103,3 +103,6 @@ open -a TextEdit "/Users/pradeep/Library/Application Support/Claude/claude_deskt
 ```
 
 5. Open Claude Desktop and view the connectors to see the new MCP servers.
+
+6. Ensure that Grafana is conencted to a Prometheus data source via http://host.docker.internal:9090
+7. 
