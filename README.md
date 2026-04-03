@@ -29,12 +29,12 @@ The full repositories can be accessed in the following links:
 docker build -t java-mcp-server .
 ```
 
-2. Open a termincal window and create a new MCP catalog file:
+3. Open a termincal window and create a new MCP catalog file:
 ```bash
 nano ~/.docker/mcp/catalogs/customCatalog.yaml
 ```
 
-3. Create the YAML file with the following code
+4. Create the YAML file with the following code
 ```yaml
 version: 2
 name: custom
@@ -54,7 +54,7 @@ registry:
     ref: ""
 ```
 
-3. Update the Docker MCP registry with our custom server images.
+5. Update the Docker MCP registry with our custom server images.
 ```bash
 nano ~/.docker/mcp/registry.yaml
 ```
@@ -66,7 +66,7 @@ registry:
     ref: ""
 ```
 
-4. Update the Claude config file with the newly created configuration files.
+6. Update the Claude config file with the newly created configuration files.
 ```bash
 open -a TextEdit "/Users/pradeep/Library/Application Support/Claude/claude_desktop_config.json"
 ```
@@ -102,7 +102,6 @@ open -a TextEdit "/Users/pradeep/Library/Application Support/Claude/claude_deskt
 }
 ```
 
-5. Open Claude Desktop and view the connectors to see the new MCP servers.
+7. Open Claude Desktop and view the connectors to see the new MCP servers.
 
-6. Ensure that Grafana is conencted to a Prometheus data source via http://host.docker.internal:9090
-7. 
+8. Ensure that Grafana is conencted to a Prometheus data source via http://host.docker.internal:9090
