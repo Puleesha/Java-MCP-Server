@@ -131,12 +131,17 @@ public class Main {
                             null
                     ))
                     .callHandler((_, toolReq) -> {
+                        long startTime = System.nanoTime();
                         try {
                             Map<String, Object> arguments = toolReq.arguments();
                             int limit = ((Number) arguments.get("limit")).intValue();
 
                             ToolService requestScope = new ToolService();
                             RequestStats requestStats = requestScope.baselineToolProcess(limit);
+
+                            reqTotal.inc();
+                            todosCompletedPerRequest.observe(requestStats.todoCount());
+                            leakedThreads.observe(requestStats.activeTasks());
 
                             String result = "TODOs found = " + requestStats.todoTasks() +
                                     ". Scanned " + requestStats.filesScanned() +
@@ -152,6 +157,10 @@ public class Main {
                                     .addTextContent("ERROR: " + e.getMessage())
                                     .isError(true)
                                     .build();
+                        }
+                        finally {
+                            double latency = (System.nanoTime() - startTime) / 1_000_000_000.0;
+                            reqLatency.observe(latency);
                         }
                     })
                     .build();
@@ -167,12 +176,17 @@ public class Main {
                             null
                     ))
                     .callHandler((_, toolReq) -> {
+                        long startTime = System.nanoTime();
                         try {
                             Map<String, Object> arguments = toolReq.arguments();
                             int limit = ((Number) arguments.get("limit")).intValue();
 
                             ToolService requestScope = new ToolService();
                             RequestStats requestStats = requestScope.structuredToolProcess(limit);
+
+                            reqTotal.inc();
+                            todosCompletedPerRequest.observe(requestStats.todoCount());
+                            leakedThreads.observe(requestStats.activeTasks());
 
                             String result = "TODOs found = " + requestStats.todoTasks() +
                                     ". Scanned " + requestStats.filesScanned() +
@@ -188,6 +202,10 @@ public class Main {
                                     .addTextContent("ERROR: " + e.getMessage())
                                     .isError(true)
                                     .build();
+                        }
+                        finally {
+                            double latency = (System.nanoTime() - startTime) / 1_000_000_000.0;
+                            reqLatency.observe(latency);
                         }
                     })
                     .build();

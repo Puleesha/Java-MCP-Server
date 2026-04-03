@@ -8,7 +8,7 @@ It includes a mock repository for the file analysis, which include three folders
 
 <ul>
   <li><strong>Java -</strong> Contains a section of the apache-commons-lang library</li>
-  <li><strong>Rust -</strong> Contains a secrion of the Rust Compiler </li>
+  <li><strong>Rust -</strong> Contains a section of the Rust Compiler </li>
   <li><strong>JavaScript -</strong> Contains a section of the Facebook React source code</li>
 </ul>
 
@@ -29,7 +29,7 @@ The full repositories can be accessed in the following links:
 docker build -t java-mcp-server .
 ```
 
-3. Open a termincal window and create a new MCP catalog file:
+3. Open a terminal window and create a new MCP catalog file:
 ```bash
 nano ~/.docker/mcp/catalogs/customCatalog.yaml
 ```
@@ -104,4 +104,4 @@ open -a TextEdit "/Users/pradeep/Library/Application Support/Claude/claude_deskt
 
 7. Open Claude Desktop and view the connectors to see the new MCP servers.
 
-8. Ensure that Grafana is conencted to a Prometheus data source via http://host.docker.internal:9090
+8. Ensure that Grafana is connected to a Prometheus data source via http://host.docker.internal:9090
