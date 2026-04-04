@@ -12,7 +12,10 @@ import io.prometheus.metrics.core.metrics.Histogram;
 import io.prometheus.metrics.exporter.httpserver.HTTPServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.sun.net.httpserver.HttpServer;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
 
@@ -22,39 +25,37 @@ import java.util.Map;
 public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
+    // Prometheus server metrics
+    public static Counter reqTotal = Counter.builder()
+            .name("requests_total")
+            .help("Total MCP tool calls received")
+            .register();
+
+    public static Histogram reqLatency = Histogram.builder()
+            .name("request_duration_seconds")
+            .help("End-to-end MCP tool call duration")
+            .register();
+
+    public static Histogram todosCompletedPerRequest = Histogram.builder()
+            .name("todos_completed_per_request")
+            .help("Number of TODOs completed before return or timeout")
+            .register();
+
+    public static Histogram leakedThreads = Histogram.builder()
+            .name("leaked_threads")
+            .help("Number of threads still running after request completes")
+            .register();
+
     public static void main(String[] args) {
 
         try {
-            // -------------------------
-            // Prometheus server metrics
-            // -------------------------
-
-            Counter reqTotal = Counter.builder()
-                    .name("requests_total")
-                    .help("Total MCP tool calls received")
-                    .register();
-
-            Histogram reqLatency = Histogram.builder()
-                    .name("request_duration_seconds")
-                    .help("End-to-end MCP tool call duration")
-                    .register();
-
-            Histogram todosCompletedPerRequest = Histogram.builder()
-                    .name("todos_completed_per_request")
-                    .help("Number of TODOs completed before return or timeout")
-                    .register();
-
-            Histogram leakedThreads = Histogram.builder()
-                    .name("leaked_threads")
-                    .help("Number of threads still running after request completes")
-                    .register();
-
             String variant = (args.length >= 3) ? args[3] : "";
             int port = "baseline".equals(variant) ? 9100 : 9101;
 
             log.info("Listening on port {}", port);
 
             HTTPServer _ = HTTPServer.builder().port(port).buildAndStart();
+            startHTTPServer();
 
             log.info("Metrics server running on http://0.0.0.0:{}/metrics", port);
 
@@ -230,5 +231,67 @@ public class Main {
             Thread.currentThread().interrupt();
             log.error("Error in main file: {}", e.getMessage());
         }
+    }
+
+    public static void startHTTPServer() {
+        HttpServer server;
+        try {
+            server = HttpServer.create(new InetSocketAddress(8080), 0);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        server.createContext("/mcp", exchange -> {
+            if (!exchange.getRequestMethod().equals("POST")) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+
+            ObjectMapper mapperObj = new ObjectMapper();
+            Map<String, Object> request = mapperObj.readValue(exchange.getRequestBody(), Map.class);
+
+            Map<String, Object> params = (Map<String, Object>) request.get("params");
+            String toolName = (String) params.get("name");
+            Map<String, Object> arguments = (Map<String, Object>) params.get("arguments");
+
+            int limit = ((Number) arguments.get("limit")).intValue();
+
+            long startTime = System.nanoTime();
+            RequestStats result;
+
+            try {
+                if ("java_baseline_analyzer".equals(toolName))
+                    result = new ToolService().baselineToolProcess(limit);
+                else
+                    result = new ToolService().structuredToolProcess(limit);
+            }
+            catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+            reqTotal.inc();
+            todosCompletedPerRequest.observe(result.todoCount());
+            leakedThreads.observe(result.activeTasks());
+
+            String responseText = "TODOs found = " + result.todoTasks();
+
+            double latency = (System.nanoTime() - startTime) / 1_000_000_000.0;
+            reqLatency.observe(latency);
+
+            Map<String, Object> response = Map.of(
+                    "jsonrpc", "2.0",
+                    "id", request.get("id"),
+                    "result", Map.of("content", responseText)
+            );
+
+            byte[] respBytes = mapperObj.writeValueAsBytes(response);
+
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, respBytes.length);
+            exchange.getResponseBody().write(respBytes);
+            exchange.close();
+        });
+
+        server.start();
     }
 }
