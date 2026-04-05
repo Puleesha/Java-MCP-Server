@@ -55,7 +55,8 @@ public class Main {
             log.info("Listening on port {}", port);
 
             HTTPServer _ = HTTPServer.builder().port(port).buildAndStart();
-            startHTTPServer();
+            // Uncomment to run the HTTP benchmark
+//            startHTTPServer();
 
             log.info("Metrics server running on http://0.0.0.0:{}/metrics", port);
 
