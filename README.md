@@ -105,3 +105,17 @@ open -a TextEdit "/Users/pradeep/Library/Application Support/Claude/claude_deskt
 7. Open Claude Desktop and view the connectors to see the new MCP servers.
 
 8. Ensure that Grafana is connected to a Prometheus data source via http://host.docker.internal:9090
+
+9. To do the HTTP Benchmark, run
+   ```bash
+   docker run --rm -p 9101:9101 -p 8080:8080 java-mcp-server --test 00 --mode structured
+   ```
+   or
+   ```bash
+   docker run --rm -p 9100:9100 -p 8080:8080 java-mcp-server --test 00 --mode baseline
+   ```
+   in the terminal and then configure and run
+   ```bash
+   node HTTPBenchmark
+   ```
+   in the directory of the benchmark file.
