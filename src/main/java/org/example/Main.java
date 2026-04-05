@@ -251,7 +251,7 @@ public class Main {
             Map<String, Object> request = mapperObj.readValue(exchange.getRequestBody(), Map.class);
 
             Map<String, Object> params = (Map<String, Object>) request.get("params");
-            String toolName = (String) params.get("name");
+            String serverVariant = (String) params.get("variant");
             Map<String, Object> arguments = (Map<String, Object>) params.get("arguments");
 
             int limit = ((Number) arguments.get("limit")).intValue();
@@ -260,7 +260,7 @@ public class Main {
             RequestStats result;
 
             try {
-                if ("java_baseline_analyzer".equals(toolName))
+                if ("baseline".equals(serverVariant))
                     result = new ToolService().baselineToolProcess(limit);
                 else
                     result = new ToolService().structuredToolProcess(limit);
