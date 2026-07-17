@@ -85,10 +85,13 @@ public class ToolService {
     }
 
     /**
-     * Structured variant:
-     * - Creates a new scope per request
-     * - All task created goes through the scope.
-     * - On deadline, the scope cancels remaining tasks.
+     * The structured tool process for file analysis
+     *
+     * @param limit The limit of files
+     *
+     * @return The request stats
+     *
+     * @throws InterruptedException If a file is invalid
      */
     public RequestStats structuredToolProcess(int limit) throws InterruptedException {
 
