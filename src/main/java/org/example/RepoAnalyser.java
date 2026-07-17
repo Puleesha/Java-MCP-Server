@@ -24,9 +24,7 @@ public class RepoAnalyser {
     private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
     private static final int REQUEST_LENGTH_LIMIT = 2000;
 
-    // Counter for the total number of TODOs found
     private final AtomicInteger todoCount = new AtomicInteger(0);
-    // Counter for the total number of files analyzed
     private final AtomicInteger fileCount = new AtomicInteger(0);
     // Semaphore to limit the number of concurrent file analysis tasks
     private final Semaphore connections = new Semaphore(100);
