@@ -21,9 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RepoAnalyser {
     private static final Logger log = LoggerFactory.getLogger(RepoAnalyser.class);
 
-    // Maximum time a request can take
     private static final Duration REQUEST_DEADLINE = Duration.ofSeconds(5);
-    // Maximum length of the response
     private static final int REQUEST_LENGTH_LIMIT = 2000;
 
     // Counter for the total number of TODOs found
