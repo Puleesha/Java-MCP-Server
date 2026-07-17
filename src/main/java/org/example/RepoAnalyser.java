@@ -83,6 +83,7 @@ public class RepoAnalyser {
      * @throws IOException If an I/O error occurs
      */
     private List<Path> discoverFiles(Path rootDir) throws IOException {
+
         List<Path> result = new LinkedList<>();
 
         try (var stream = Files.walk(rootDir)) {
